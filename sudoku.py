@@ -117,6 +117,7 @@ class Game:
         self.puzzle = list(puzzle)  # givens, immutable during play
         self.solution = list(solution)
         self.board = list(puzzle)
+        self.marks = [set() for _ in range(81)]  # pencil marks per cell
         self.difficulty = difficulty
 
     @classmethod
@@ -126,12 +127,26 @@ class Game:
     def is_given(self, i: int) -> bool:
         return self.puzzle[i] != 0
 
+    def _apply(self, i: int, v: int) -> None:
+        self.board[i] = v
+        if v:  # a placed value erases the cell's marks and that digit from peer marks
+            self.marks[i] = set()
+            for p in PEERS[i]:
+                self.marks[p].discard(v)
+
     def put(self, i: int, v: int) -> None:
         if self.is_given(i):
             raise ValueError("cell is a given")
         if v not in DIGITS and v != 0:
             raise ValueError("value must be 0-9")
-        self.board[i] = v
+        self._apply(i, v)
+
+    def toggle_mark(self, i: int, v: int) -> None:
+        if self.is_given(i) or self.board[i]:
+            raise ValueError("cell not markable")
+        if v not in DIGITS:
+            raise ValueError("mark must be 1-9")
+        self.marks[i] ^= {v}
 
     def wrong_cells(self) -> list[int]:
         return [i for i in range(81) if self.board[i] and self.board[i] != self.solution[i]]
@@ -145,7 +160,7 @@ class Game:
         if not todo:
             return None
         i = (rng or random).choice(todo)
-        self.board[i] = self.solution[i]
+        self._apply(i, self.solution[i])
         return i
 
     def to_json(self) -> str:
@@ -156,6 +171,7 @@ class Game:
                 "puzzle": self.puzzle,
                 "solution": self.solution,
                 "board": self.board,
+                "marks": [sorted(m) for m in self.marks],
             }
         )
 
@@ -164,4 +180,5 @@ class Game:
         d = json.loads(s)
         g = cls(d["puzzle"], d["solution"], d.get("difficulty", "medium"))
         g.board = list(d["board"])
+        g.marks = [set(m) for m in d.get("marks", [[]] * 81)]
         return g

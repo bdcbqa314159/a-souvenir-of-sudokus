@@ -1,7 +1,7 @@
 """Self-check: python3 test_sudoku.py"""
 import random
 
-from sudoku import Game, count_solutions, generate, solve
+from sudoku import PEERS, Game, count_solutions, generate, solve
 
 
 def main() -> None:
@@ -29,8 +29,27 @@ def main() -> None:
         raise AssertionError("put on given must fail")
     except ValueError:
         pass
+    # pencil marks: toggle, prune on put, given/filled cells rejected
+    empties = [j for j in range(81) if g.board[j] == 0]
+    a = empties[0]
+    g.toggle_mark(a, 7)
+    g.toggle_mark(a, 3)
+    g.toggle_mark(a, 7)
+    assert g.marks[a] == {3}
+    peer = next(j for j in empties[1:] if a in PEERS[j])
+    g.marks[peer] = {3, 5}
+    g.put(a, 3)
+    assert g.marks[a] == set() and g.marks[peer] == {5}
+    g.put(a, 0)
+    try:
+        g.toggle_mark(next(j for j in range(81) if g.is_given(j)), 1)
+        raise AssertionError("mark on given must fail")
+    except ValueError:
+        pass
+
+    g.marks[a] = {2, 9}
     g2 = Game.from_json(g.to_json())
-    assert g2.board == g.board and g2.puzzle == g.puzzle
+    assert g2.board == g.board and g2.puzzle == g.puzzle and g2.marks == g.marks
     while g.hint() is not None:
         pass
     assert g.is_solved()
