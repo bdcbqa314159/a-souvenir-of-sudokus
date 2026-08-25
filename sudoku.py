@@ -28,6 +28,15 @@ def candidates(board: list[int], i: int) -> set[int]:
     return DIGITS - {board[p] for p in PEERS[i]}
 
 
+def consistent(board: list[int]) -> bool:
+    """No digit repeated within any row/col/box."""
+    for unit in ROWS + COLS + BOXES:
+        seen = [board[i] for i in unit if board[i]]
+        if len(seen) != len(set(seen)):
+            return False
+    return True
+
+
 def _most_constrained(board: list[int]) -> tuple[int, set[int]] | None:
     """Empty cell with fewest candidates, or None if board is full."""
     best = None
@@ -43,6 +52,8 @@ def _most_constrained(board: list[int]) -> tuple[int, set[int]] | None:
 
 def solve(board: list[int], rng: random.Random | None = None) -> list[int] | None:
     """A solution to `board`, or None. rng shuffles branching (used to generate)."""
+    if not consistent(board):
+        return None
     b = list(board)
 
     def bt() -> bool:
@@ -65,6 +76,8 @@ def solve(board: list[int], rng: random.Random | None = None) -> list[int] | Non
 
 def count_solutions(board: list[int], limit: int = 2) -> int:
     """Number of solutions, stopping at `limit` (uniqueness check = limit 2)."""
+    if not consistent(board):
+        return 0
     b = list(board)
     n = 0
 
@@ -92,6 +105,8 @@ CLUE_TARGET = {"easy": 40, "medium": 32, "hard": 26}
 
 def generate(difficulty: str = "medium", seed: int | None = None) -> tuple[list[int], list[int]]:
     """(puzzle, solution). Puzzle always has exactly one solution."""
+    if difficulty not in CLUE_TARGET:
+        raise ValueError(f"difficulty must be one of {sorted(CLUE_TARGET)}")
     rng = random.Random(seed)
     full = solve([0] * 81, rng)
     assert full is not None
@@ -178,7 +193,22 @@ class Game:
     @classmethod
     def from_json(cls, s: str) -> "Game":
         d = json.loads(s)
-        g = cls(d["puzzle"], d["solution"], d.get("difficulty", "medium"))
-        g.board = list(d["board"])
-        g.marks = [set(m) for m in d.get("marks", [[]] * 81)]
+
+        def grid(key: str) -> list[int]:
+            v = d.get(key)
+            if not (isinstance(v, list) and len(v) == 81 and all(isinstance(x, int) and 0 <= x <= 9 for x in v)):
+                raise ValueError(f"bad save file: {key}")
+            return v
+
+        puzzle, solution, board = grid("puzzle"), grid("solution"), grid("board")
+        if 0 in solution or not consistent(solution):
+            raise ValueError("bad save file: solution is not a solved grid")
+        if any(puzzle[i] not in (0, solution[i]) for i in range(81)):
+            raise ValueError("bad save file: puzzle/solution mismatch")
+        marks = d.get("marks", [[]] * 81)
+        if not (isinstance(marks, list) and len(marks) == 81):
+            raise ValueError("bad save file: marks")
+        g = cls(puzzle, solution, d.get("difficulty", "medium"))
+        g.board = list(board)
+        g.marks = [set(m) for m in marks]
         return g

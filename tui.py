@@ -3,7 +3,7 @@
 
 Usage: python3 tui.py [easy|medium|hard] [seed]
 Keys:  hjkl / arrows move · 1-9 put (toggle marks in pencil mode) · m pencil mode
-       x or 0 clear · u undo · H hint · c check · s/l save/load · q quit
+       x or 0 clear · u undo · H hint · c check · s/L save/load · q quit
 
 Colours follow the original handwritten grids: givens in black (terminal ink),
 user entries and pencil marks in red, the central tic-tac-toe cross in black
@@ -12,10 +12,11 @@ with every other grid line in red. Conflicts flash yellow.
 import curses
 import sys
 
-from sudoku import Game, PEERS
+from sudoku import CLUE_TARGET, Game, PEERS
 
 SAVE = "game.json"
-HELP = "hjkl move  1-9 put  m pencil  x clear  u undo  H hint  c check  s/l save/load  q quit"
+HELP = "hjkl move  1-9 put  m pencil  x clear  u undo  H hint  c check  s/L save/load  q quit"
+MIN_LINES, MIN_COLS = 23, 40
 MOVES = {
     "h": -1, "l": +1, "k": -9, "j": +9,
     curses.KEY_LEFT: -1, curses.KEY_RIGHT: +1, curses.KEY_UP: -9, curses.KEY_DOWN: +9,
@@ -38,6 +39,14 @@ def restore(g, s):
 
 def draw(scr, g, cur, msg, pencil):
     scr.erase()
+    lines, cols = scr.getmaxyx()
+    if lines < MIN_LINES or cols < MIN_COLS:
+        try:
+            scr.addstr(0, 0, f"terminal too small — need {MIN_COLS}x{MIN_LINES}"[: cols - 1])
+        except curses.error:
+            pass
+        scr.refresh()
+        return
     red = curses.color_pair(RED)
     hline = ("+" + "-" * 3) * 9 + "+"
     # red minor lines first, black tic-tac-toe cross drawn on top — like the original
@@ -75,19 +84,22 @@ def draw(scr, g, cur, msg, pencil):
                 scr.addstr(y, x, f"{s:<3}", attr)
 
     mk = " ".join(map(str, sorted(g.marks[cur]))) or "-"
-    scr.addstr(19, 0, msg[:70])
-    scr.addstr(20, 0, f"[{'PENCIL' if pencil else 'pen'}]  marks here: {mk}")
-    scr.addstr(21, 0, HELP, curses.A_DIM)
+    w = cols - 1
+    scr.addstr(19, 0, msg[:w])
+    scr.addstr(20, 0, f"[{'PENCIL' if pencil else 'pen'}]  marks here: {mk}"[:w])
+    scr.addstr(21, 0, HELP[:w], curses.A_DIM)
     scr.refresh()
 
 
 def run(scr, g):
-    if curses.LINES < 23 or curses.COLS < 80:
-        raise SystemExit("terminal too small — need at least 80x23")
-    curses.curs_set(0)
-    curses.use_default_colors()
-    curses.init_pair(RED, curses.COLOR_RED, -1)
-    curses.init_pair(YELLOW, curses.COLOR_YELLOW, -1)
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
+    if curses.has_colors():
+        curses.use_default_colors()
+        curses.init_pair(RED, curses.COLOR_RED, -1)
+        curses.init_pair(YELLOW, curses.COLOR_YELLOW, -1)
     cur, msg, undo, pencil = 40, f"a-souvenir-of-sudokus — {g.difficulty}", [], False
     while True:
         draw(scr, g, cur, msg, pencil)
@@ -104,7 +116,7 @@ def run(scr, g):
                 cur += d
         elif ch == "m":
             pencil = not pencil
-        elif isinstance(ch, str) and (ch.isdigit() or ch == "x"):
+        elif isinstance(ch, str) and ch in "0123456789x":
             if g.is_given(cur):
                 msg = "given cell — locked"
             elif ch in ("x", "0"):
@@ -139,16 +151,19 @@ def run(scr, g):
             wrong = g.wrong_cells()
             msg = "all good so far" if not wrong else f"{len(wrong)} wrong cell(s)"
         elif ch == "s":
-            with open(SAVE, "w") as f:
-                f.write(g.to_json())
-            msg = f"saved to {SAVE}"
-        elif ch == "l":
+            try:
+                with open(SAVE, "w") as f:
+                    f.write(g.to_json())
+                msg = f"saved to {SAVE}"
+            except OSError as e:
+                msg = f"save failed: {e}"
+        elif ch == "L":  # capital: lowercase l is vim's move-right
             try:
                 with open(SAVE) as f:
                     g = Game.from_json(f.read())
                 undo.clear()
                 msg = f"loaded {SAVE}"
-            except OSError as e:
+            except (OSError, ValueError) as e:
                 msg = f"load failed: {e}"
         if g.is_solved():
             msg = "solved — grand-père would be proud.  (q to quit)"
@@ -156,6 +171,8 @@ def run(scr, g):
 
 def main():
     diff = sys.argv[1] if len(sys.argv) > 1 else "medium"
+    if diff not in CLUE_TARGET:
+        sys.exit(f"unknown difficulty {diff!r} — pick one of {sorted(CLUE_TARGET)}")
     seed = int(sys.argv[2]) if len(sys.argv) > 2 else None
     curses.wrapper(run, Game.new(diff, seed))
 

@@ -54,6 +54,48 @@ def main() -> None:
         pass
     assert g.is_solved()
 
+    # inconsistent boards are rejected, not solved/hung
+    bad = [0] * 81
+    bad[0] = bad[1] = 5
+    assert solve(bad) is None and count_solutions(bad) == 0
+
+    # bad difficulty rejected
+    try:
+        generate("expert")
+        raise AssertionError("unknown difficulty must fail")
+    except ValueError:
+        pass
+
+    # malformed save files rejected
+    import json
+
+    for s in ["{}", json.dumps({"puzzle": [0] * 80, "solution": [1] * 81, "board": [0] * 81})]:
+        try:
+            Game.from_json(s)
+            raise AssertionError("bad save must fail")
+        except ValueError:
+            pass
+    d = json.loads(g.to_json())
+    d["puzzle"][next(i for i in range(81) if d["puzzle"][i])] = 0  # still fine: fewer givens
+    Game.from_json(json.dumps(d))
+    d["puzzle"] = [10 - v if v else 0 for v in d["solution"]]  # puzzle contradicts solution
+    try:
+        Game.from_json(json.dumps(d))
+        raise AssertionError("puzzle/solution mismatch must fail")
+    except ValueError:
+        pass
+
+    # cli coordinate parsing bounds
+    from cli import idx
+
+    assert idx("1", "1") == 0 and idx("9", "9") == 80
+    for r, c in [("0", "1"), ("1", "0"), ("10", "1"), ("1", "-1")]:
+        try:
+            idx(r, c)
+            raise AssertionError("out-of-range coordinate must fail")
+        except ValueError:
+            pass
+
     # tui conflict checker (imports fine headless; curses only starts in wrapper)
     from tui import conflicts
 

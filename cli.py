@@ -6,7 +6,7 @@ Commands: put r c v | del r c | hint | check | solve | save [f] | load [f] | new
 """
 import sys
 
-from sudoku import Game
+from sudoku import CLUE_TARGET, Game
 
 SAVE = "game.json"
 
@@ -27,11 +27,16 @@ def show(g: Game) -> None:
 
 
 def idx(r: str, c: str) -> int:
-    return (int(r) - 1) * 9 + (int(c) - 1)
+    ri, ci = int(r), int(c)
+    if not (1 <= ri <= 9 and 1 <= ci <= 9):
+        raise ValueError("row and column must be 1-9")
+    return (ri - 1) * 9 + (ci - 1)
 
 
 def main() -> None:
     diff = sys.argv[1] if len(sys.argv) > 1 else "medium"
+    if diff not in CLUE_TARGET:
+        sys.exit(f"unknown difficulty {diff!r} — pick one of {sorted(CLUE_TARGET)}")
     seed = int(sys.argv[2]) if len(sys.argv) > 2 else None
     g = Game.new(diff, seed)
     print(f"a-souvenir-of-sudokus — {diff}")
