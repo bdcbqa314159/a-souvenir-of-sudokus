@@ -1,0 +1,167 @@
+"""a-souvenir-of-sudokus — engine.
+
+Pure logic, no I/O. Board = list of 81 ints, 0 = empty, row-major.
+Any frontend (CLI, browser, desktop) talks to this via Game + JSON.
+Kept deliberately flat and typed-by-convention: this is the spec for the C++ rewrite.
+"""
+from __future__ import annotations
+
+import json
+import random
+
+DIGITS = set(range(1, 10))
+
+ROWS = [[r * 9 + c for c in range(9)] for r in range(9)]
+COLS = [[r * 9 + c for r in range(9)] for c in range(9)]
+BOXES = [
+    [(br * 3 + r) * 9 + (bc * 3 + c) for r in range(3) for c in range(3)]
+    for br in range(3)
+    for bc in range(3)
+]
+PEERS = [set() for _ in range(81)]
+for _unit in ROWS + COLS + BOXES:
+    for _i in _unit:
+        PEERS[_i] |= set(_unit) - {_i}
+
+
+def candidates(board: list[int], i: int) -> set[int]:
+    return DIGITS - {board[p] for p in PEERS[i]}
+
+
+def _most_constrained(board: list[int]) -> tuple[int, set[int]] | None:
+    """Empty cell with fewest candidates, or None if board is full."""
+    best = None
+    for i in range(81):
+        if board[i] == 0:
+            c = candidates(board, i)
+            if best is None or len(c) < len(best[1]):
+                best = (i, c)
+                if len(c) <= 1:
+                    break
+    return best
+
+
+def solve(board: list[int], rng: random.Random | None = None) -> list[int] | None:
+    """A solution to `board`, or None. rng shuffles branching (used to generate)."""
+    b = list(board)
+
+    def bt() -> bool:
+        cell = _most_constrained(b)
+        if cell is None:
+            return True
+        i, cands = cell
+        vals = list(cands)
+        if rng:
+            rng.shuffle(vals)
+        for v in vals:
+            b[i] = v
+            if bt():
+                return True
+        b[i] = 0
+        return False
+
+    return b if bt() else None
+
+
+def count_solutions(board: list[int], limit: int = 2) -> int:
+    """Number of solutions, stopping at `limit` (uniqueness check = limit 2)."""
+    b = list(board)
+    n = 0
+
+    def bt() -> bool:  # True = limit reached, abort
+        nonlocal n
+        cell = _most_constrained(b)
+        if cell is None:
+            n += 1
+            return n >= limit
+        i, cands = cell
+        for v in cands:
+            b[i] = v
+            if bt():
+                return True
+        b[i] = 0
+        return False
+
+    bt()
+    return n
+
+
+# ponytail: difficulty = clue count; upgrade to technique-based grading when it matters
+CLUE_TARGET = {"easy": 40, "medium": 32, "hard": 26}
+
+
+def generate(difficulty: str = "medium", seed: int | None = None) -> tuple[list[int], list[int]]:
+    """(puzzle, solution). Puzzle always has exactly one solution."""
+    rng = random.Random(seed)
+    full = solve([0] * 81, rng)
+    assert full is not None
+    puzzle = list(full)
+    order = list(range(81))
+    rng.shuffle(order)
+    clues = 81
+    for i in order:
+        if clues <= CLUE_TARGET[difficulty]:
+            break
+        saved, puzzle[i] = puzzle[i], 0
+        if count_solutions(puzzle) == 1:
+            clues -= 1
+        else:
+            puzzle[i] = saved
+    return puzzle, full
+
+
+class Game:
+    """One playing session. The JSON form is the frontend contract."""
+
+    def __init__(self, puzzle: list[int], solution: list[int], difficulty: str = "medium"):
+        self.puzzle = list(puzzle)  # givens, immutable during play
+        self.solution = list(solution)
+        self.board = list(puzzle)
+        self.difficulty = difficulty
+
+    @classmethod
+    def new(cls, difficulty: str = "medium", seed: int | None = None) -> "Game":
+        return cls(*generate(difficulty, seed), difficulty)
+
+    def is_given(self, i: int) -> bool:
+        return self.puzzle[i] != 0
+
+    def put(self, i: int, v: int) -> None:
+        if self.is_given(i):
+            raise ValueError("cell is a given")
+        if v not in DIGITS and v != 0:
+            raise ValueError("value must be 0-9")
+        self.board[i] = v
+
+    def wrong_cells(self) -> list[int]:
+        return [i for i in range(81) if self.board[i] and self.board[i] != self.solution[i]]
+
+    def is_solved(self) -> bool:
+        return self.board == self.solution
+
+    def hint(self, rng: random.Random | None = None) -> int | None:
+        """Fill one empty-or-wrong cell with its solution value; returns the index."""
+        todo = [i for i in range(81) if self.board[i] != self.solution[i]]
+        if not todo:
+            return None
+        i = (rng or random).choice(todo)
+        self.board[i] = self.solution[i]
+        return i
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "name": "a-souvenir-of-sudokus",
+                "difficulty": self.difficulty,
+                "puzzle": self.puzzle,
+                "solution": self.solution,
+                "board": self.board,
+            }
+        )
+
+    @classmethod
+    def from_json(cls, s: str) -> "Game":
+        d = json.loads(s)
+        g = cls(d["puzzle"], d["solution"], d.get("difficulty", "medium"))
+        g.board = list(d["board"])
+        return g
