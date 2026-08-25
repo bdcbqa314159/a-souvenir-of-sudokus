@@ -35,6 +35,15 @@ def main() -> None:
         pass
     assert g.is_solved()
 
+    # tui conflict checker (imports fine headless; curses only starts in wrapper)
+    from tui import conflicts
+
+    b = [0] * 81
+    b[0] = b[8] = 5  # same row
+    assert conflicts(b) == {0, 8}
+    b[8] = 6
+    assert conflicts(b) == set()
+
     print("all checks passed")
 
 
