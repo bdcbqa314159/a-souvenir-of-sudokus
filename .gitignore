@@ -1,3 +1,31 @@
 __pycache__/
 game.json
 .DS_Store
+
+# C++ build / generated / machine-specific
+build/
+compile_commands.json
+.cache/
+CMakeUserPresets.json
+*.o
+*.a
+*.dylib
+*.dSYM/
+*.profraw
+*.profdata
+
+# personal / editor
+.venv/
+.claude/
+.vscode/
+.vs/
+CLAUDE.local.md
+
+# secrets
+*.key
+*.pem
+*.p12
+.env
+.env.*
+credentials
+*.secret

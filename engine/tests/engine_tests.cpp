@@ -1,0 +1,164 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <nlohmann/json.hpp>
+#include <souvenir/engine.hpp>
+
+using souvenir::Board;
+using souvenir::Difficulty;
+using souvenir::Game;
+using souvenir::kCells;
+
+namespace {
+
+int clue_count(const Board &b) {
+  return static_cast<int>(std::count_if(b.begin(), b.end(), [](int v) { return v != 0; }));
+}
+
+bool valid_full_grid(const Board &b) {
+  return std::find(b.begin(), b.end(), 0) == b.end() && souvenir::consistent(b);
+}
+
+} // namespace
+
+TEST(Solve, EmptyBoardYieldsValidGrid) {
+  auto full = souvenir::solve(Board{}, 1);
+  ASSERT_TRUE(full.has_value());
+  EXPECT_TRUE(valid_full_grid(*full));
+}
+
+TEST(Solve, InconsistentBoardRejected) {
+  Board bad{};
+  bad[0] = bad[1] = 5;
+  EXPECT_FALSE(souvenir::solve(bad).has_value());
+  EXPECT_EQ(souvenir::count_solutions(bad), 0);
+}
+
+TEST(Generate, UniqueSolutionAndClueTargets) {
+  const std::pair<Difficulty, int> cases[] = {
+      {Difficulty::kEasy, 40}, {Difficulty::kMedium, 32}, {Difficulty::kHard, 26}};
+  for (auto [diff, target] : cases) {
+    auto g = souvenir::generate(diff, 42);
+    EXPECT_TRUE(valid_full_grid(g.solution));
+    EXPECT_EQ(souvenir::count_solutions(g.puzzle), 1);
+    EXPECT_GE(clue_count(g.puzzle), target);
+    for (int i = 0; i < kCells; ++i) {
+      auto u = static_cast<std::size_t>(i);
+      EXPECT_TRUE(g.puzzle[u] == 0 || g.puzzle[u] == g.solution[u]);
+    }
+    auto solved = souvenir::solve(g.puzzle);
+    ASSERT_TRUE(solved.has_value());
+    EXPECT_EQ(*solved, g.solution);
+  }
+}
+
+TEST(Generate, SeedReproducible) {
+  auto a = souvenir::generate(Difficulty::kMedium, 7);
+  auto b = souvenir::generate(Difficulty::kMedium, 7);
+  EXPECT_EQ(a.puzzle, b.puzzle);
+  EXPECT_EQ(a.solution, b.solution);
+}
+
+TEST(DifficultyNames, RoundTripAndRejection) {
+  for (auto d : {Difficulty::kEasy, Difficulty::kMedium, Difficulty::kHard})
+    EXPECT_EQ(souvenir::difficulty_from_string(souvenir::to_string(d)), d);
+  EXPECT_THROW(souvenir::difficulty_from_string("expert"), std::invalid_argument);
+}
+
+TEST(GameFlow, PutGivensMarksHint) {
+  Game g = Game::new_game(Difficulty::kEasy, 3);
+  int empty = -1, given = -1;
+  for (int i = 0; i < kCells && (empty < 0 || given < 0); ++i)
+    (g.is_given(i) ? given : empty) = i;
+  ASSERT_GE(empty, 0);
+  ASSERT_GE(given, 0);
+
+  EXPECT_THROW(g.put(given, 5), std::invalid_argument);
+  EXPECT_THROW(g.put(-1, 5), std::invalid_argument);
+  EXPECT_THROW(g.toggle_mark(given, 1), std::invalid_argument);
+
+  g.toggle_mark(empty, 7);
+  g.toggle_mark(empty, 3);
+  g.toggle_mark(empty, 7);
+  EXPECT_EQ(g.marks(empty), 1u << 3);
+
+  // placing a value clears the cell's marks and prunes the digit from a peer's marks
+  int peer = -1;
+  for (int i = empty + 1; i < kCells; ++i)
+    if (!g.is_given(i) && g.board()[static_cast<std::size_t>(i)] == 0 &&
+        (i / 9 == empty / 9 || i % 9 == empty % 9)) {
+      peer = i;
+      break;
+    }
+  ASSERT_GE(peer, 0);
+  g.toggle_mark(peer, 3);
+  g.toggle_mark(peer, 5);
+  g.put(empty, 3);
+  EXPECT_EQ(g.marks(empty), 0u);
+  EXPECT_EQ(g.marks(peer), 1u << 5);
+
+  g.put(empty, 0);
+  EXPECT_TRUE(g.wrong_cells().empty());
+  while (g.hint(1).has_value()) {
+  }
+  EXPECT_TRUE(g.is_solved());
+}
+
+TEST(Json, RoundTripPreservesEverything) {
+  Game g = Game::new_game(Difficulty::kHard, 11);
+  int empty = 0;
+  while (g.is_given(empty))
+    ++empty;
+  g.toggle_mark(empty, 2);
+  g.toggle_mark(empty, 9);
+  Game h = Game::from_json(g.to_json());
+  EXPECT_EQ(h.board(), g.board());
+  EXPECT_EQ(h.puzzle(), g.puzzle());
+  EXPECT_EQ(h.solution(), g.solution());
+  EXPECT_EQ(h.difficulty(), g.difficulty());
+  for (int i = 0; i < kCells; ++i)
+    EXPECT_EQ(h.marks(i), g.marks(i));
+}
+
+TEST(Json, MatchesPythonSchema) {
+  Game g = Game::new_game(Difficulty::kEasy, 5);
+  auto j = nlohmann::json::parse(g.to_json());
+  EXPECT_EQ(j["name"], "a-souvenir-of-sudokus");
+  EXPECT_EQ(j["difficulty"], "easy");
+  for (const char *key : {"puzzle", "solution", "board", "marks"})
+    EXPECT_EQ(j[key].size(), static_cast<std::size_t>(kCells));
+}
+
+TEST(Json, MalformedRejected) {
+  EXPECT_THROW(Game::from_json("not json"), std::invalid_argument);
+  EXPECT_THROW(Game::from_json("{}"), std::invalid_argument);
+
+  Game g = Game::new_game(Difficulty::kEasy, 5);
+  auto j = nlohmann::json::parse(g.to_json());
+
+  auto corrupt = [&](auto mutate) {
+    auto c = j;
+    mutate(c);
+    EXPECT_THROW(Game::from_json(c.dump()), std::invalid_argument);
+  };
+  corrupt([](nlohmann::json &c) { c["board"].erase(80); });       // short grid
+  corrupt([](nlohmann::json &c) { c["board"][0] = 12; });         // out-of-range value
+  corrupt([](nlohmann::json &c) { c["solution"][0] = 0; });       // unsolved solution
+  corrupt([](nlohmann::json &c) { c["marks"][0] = {0}; });        // bad mark digit
+  corrupt([](nlohmann::json &c) { c["difficulty"] = "expert"; }); // unknown difficulty
+  corrupt([](nlohmann::json &c) {                                 // puzzle contradicts solution
+    for (int i = 0; i < kCells; ++i) {
+      int s = c["solution"][static_cast<std::size_t>(i)].get<int>();
+      c["puzzle"][static_cast<std::size_t>(i)] = 10 - s;
+    }
+  });
+
+  // fewer givens than the solution is still a valid save
+  auto ok = j;
+  for (int i = 0; i < kCells; ++i)
+    if (ok["puzzle"][static_cast<std::size_t>(i)].get<int>() != 0) {
+      ok["puzzle"][static_cast<std::size_t>(i)] = 0;
+      break;
+    }
+  EXPECT_NO_THROW(Game::from_json(ok.dump()));
+}
