@@ -8,6 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(souvenir src/engine.cpp)
 add_library(souvenir::souvenir ALIAS souvenir)
+# static lib links into the Python shared module — must be PIC on Linux/GCC
+set_target_properties(souvenir PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(souvenir PUBLIC cxx_std_20)
 target_include_directories(souvenir PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
