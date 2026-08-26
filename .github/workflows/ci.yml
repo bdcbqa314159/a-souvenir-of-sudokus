@@ -25,7 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Build bindings
+        run: |
+          cmake -S engine -B build -DCMAKE_BUILD_TYPE=Release -DSOUVENIR_BUILD_PYTHON=ON -DSOUVENIR_BUILD_TESTS=OFF
+          cmake --build build -j
       - run: python3 test_sudoku.py
+      - run: python3 test_bindings.py
 
   format-check:
     runs-on: ubuntu-latest

@@ -6,7 +6,13 @@ Commands: put r c v | del r c | hint | check | solve | save [f] | load [f] | new
 """
 import sys
 
-from sudoku import CLUE_TARGET, Game
+try:
+    from souvenir import CLUE_TARGET, Game
+except ImportError:
+    sys.exit(
+        "souvenir engine module not built — run:\n"
+        "  cmake --preset release -S engine -DSOUVENIR_BUILD_PYTHON=ON && cmake --build --preset release engine"
+    )
 
 SAVE = "game.json"
 

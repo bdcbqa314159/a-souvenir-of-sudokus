@@ -9,7 +9,12 @@ grids this game is named after.
 
 ## Play
 
+Build the engine module once, then play:
+
 ```
+cmake --preset release -S engine -DSOUVENIR_BUILD_PYTHON=ON
+cmake --build --preset release engine
+
 python3 tui.py [easy|medium|hard] [seed]   # vim-style grid: hjkl move, 1-9 put, x clear, u undo
 python3 cli.py [easy|medium|hard] [seed]   # line-mode REPL
 ```
@@ -19,14 +24,17 @@ REPL commands: `put r c v` · `del r c` · `hint` · `check` · `solve` · `save
 ## Test
 
 ```
-python3 test_sudoku.py
+python3 test_sudoku.py     # the Python spec engine
+python3 test_bindings.py   # compiled module + frontends + cross-engine save files
 ```
 
 ## C++ engine (`engine/`)
 
-The permanent backend: same API and JSON save-file contract as the Python
-draft, C++20, no runtime dependencies (nlohmann/json vendored). Consumable
-via CMake `FetchContent` as `souvenir::souvenir`; pybind11 bindings planned.
+The backend: same API and JSON save-file contract as the Python draft
+(`sudoku.py`, retired to executable spec), C++20, no runtime dependencies
+(nlohmann/json vendored). Consumable via CMake `FetchContent` as
+`souvenir::souvenir`. pybind11 bindings (`-DSOUVENIR_BUILD_PYTHON=ON`) build
+the `souvenir` Python module the frontends run on — local build only for now.
 
 ```
 cmake --preset release -S engine
@@ -40,6 +48,6 @@ Presets: `debug` · `release` · `asan` (non-Windows).
 
 - [x] Python engine draft (generator with guaranteed-unique solutions, solver, game state)
 - [x] CLI frontend (REPL + vim-style curses TUI)
-- [x] C++ engine (`engine/` — library + tests; frontends still consume the Python engine)
-- [ ] pybind11 bindings; pour the Python frontends onto the C++ engine
+- [x] C++ engine (`engine/` — library + tests)
+- [x] pybind11 bindings; frontends run on the compiled engine (local build; packaging when the project is final)
 - [ ] Renderer(s) — browser first, from the handwritten-grid photographs

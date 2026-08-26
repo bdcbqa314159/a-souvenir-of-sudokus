@@ -85,25 +85,7 @@ def main() -> None:
     except ValueError:
         pass
 
-    # cli coordinate parsing bounds
-    from cli import idx
-
-    assert idx("1", "1") == 0 and idx("9", "9") == 80
-    for r, c in [("0", "1"), ("1", "0"), ("10", "1"), ("1", "-1")]:
-        try:
-            idx(r, c)
-            raise AssertionError("out-of-range coordinate must fail")
-        except ValueError:
-            pass
-
-    # tui conflict checker (imports fine headless; curses only starts in wrapper)
-    from tui import conflicts
-
-    b = [0] * 81
-    b[0] = b[8] = 5  # same row
-    assert conflicts(b) == {0, 8}
-    b[8] = 6
-    assert conflicts(b) == set()
+    # frontend checks live in test_bindings.py — cli/tui now import the compiled engine
 
     print("all checks passed")
 

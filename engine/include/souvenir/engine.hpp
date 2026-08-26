@@ -15,6 +15,9 @@ namespace souvenir {
 inline constexpr int kCells = 81;
 using Board = std::array<int, kCells>; // 0 = empty
 
+// Peer cells (same row/column/box) of every cell.
+const std::array<std::vector<int>, kCells> &peers();
+
 // No digit repeated within any row/column/box.
 bool consistent(const Board &board);
 
@@ -27,6 +30,7 @@ int count_solutions(const Board &board, int limit = 2);
 enum class Difficulty { kEasy, kMedium, kHard };
 Difficulty difficulty_from_string(const std::string &name); // throws std::invalid_argument
 std::string to_string(Difficulty difficulty);
+int clue_target(Difficulty difficulty);
 
 struct Generated {
   Board puzzle;
@@ -52,9 +56,15 @@ public:
   bool is_given(int i) const { return puzzle_[static_cast<std::size_t>(i)] != 0; }
   void put(int i, int v);         // v = 0 clears; erases the cell's marks, prunes peer marks
   void toggle_mark(int i, int v); // pencil mark, only on empty non-given cells
+  void clear_marks(int i);        // erase every pencil mark in one cell
   std::uint16_t marks(int i) const {
     return marks_[static_cast<std::size_t>(i)]; // bit d set = digit d marked
   }
+
+  // Wholesale state replacement — frontend undo/restore support. Values are
+  // range-validated but game invariants (givens, mark rules) are the caller's.
+  void set_board(const Board &board);
+  void set_marks(const std::array<std::uint16_t, kCells> &marks);
 
   std::vector<int> wrong_cells() const; // filled cells that contradict the solution
   bool is_solved() const { return board_ == solution_; }

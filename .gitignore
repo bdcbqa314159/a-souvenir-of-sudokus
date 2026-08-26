@@ -10,6 +10,8 @@ CMakeUserPresets.json
 *.o
 *.a
 *.dylib
+*.so
+*.pyd
 *.dSYM/
 *.profraw
 *.profdata
