@@ -1,0 +1,40 @@
+cmake_minimum_required(VERSION 3.21)
+project(souvenir VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+add_library(souvenir src/engine.cpp)
+add_library(souvenir::souvenir ALIAS souvenir)
+target_compile_features(souvenir PUBLIC cxx_std_20)
+target_include_directories(souvenir PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+# vendored nlohmann/json — used in the interface only via to_json/from_json strings
+target_include_directories(souvenir SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+
+if(MSVC)
+  target_compile_options(souvenir PRIVATE /W4)
+else()
+  target_compile_options(souvenir PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+option(SOUVENIR_BUILD_TESTS "" ${PROJECT_IS_TOP_LEVEL})
+
+if(SOUVENIR_BUILD_TESTS)
+  enable_testing()
+  include(FetchContent)
+  FetchContent_Declare(googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.15.2 GIT_SHALLOW TRUE)
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  add_executable(souvenir_tests tests/engine_tests.cpp)
+  target_link_libraries(souvenir_tests PRIVATE souvenir GTest::gtest_main)
+  target_include_directories(souvenir_tests SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+  include(GoogleTest)
+  gtest_discover_tests(souvenir_tests)
+endif()
