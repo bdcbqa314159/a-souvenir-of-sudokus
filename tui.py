@@ -12,7 +12,13 @@ with every other grid line in red. Conflicts flash yellow.
 import curses
 import sys
 
-from sudoku import CLUE_TARGET, Game, PEERS
+try:
+    from souvenir import CLUE_TARGET, Game, PEERS
+except ImportError:
+    sys.exit(
+        "souvenir engine module not built — run:\n"
+        "  cmake --preset release -S engine -DSOUVENIR_BUILD_PYTHON=ON && cmake --build --preset release engine"
+    )
 
 SAVE = "game.json"
 HELP = "hjkl move  1-9 put  m pencil  x clear  u undo  H hint  c check  s/L save/load  q quit"
@@ -124,7 +130,7 @@ def run(scr, g):
                 if g.board[cur]:
                     g.put(cur, 0)
                 else:
-                    g.marks[cur] = set()
+                    g.clear_marks(cur)
             elif pencil:
                 if g.board[cur]:
                     msg = "cell has a value — x to clear first"

@@ -8,6 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(souvenir src/engine.cpp)
 add_library(souvenir::souvenir ALIAS souvenir)
+# static lib links into the Python shared module — must be PIC on Linux/GCC
+set_target_properties(souvenir PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_features(souvenir PUBLIC cxx_std_20)
 target_include_directories(souvenir PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -21,11 +23,28 @@ else()
   target_compile_options(souvenir PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+include(FetchContent)
+
+option(SOUVENIR_BUILD_PYTHON "Build the Python bindings (module copied to repo root)" OFF)
+
+if(SOUVENIR_BUILD_PYTHON)
+  FetchContent_Declare(pybind11
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG v3.0.1 GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(pybind11)
+
+  pybind11_add_module(souvenir_py bindings/souvenir_py.cpp)
+  target_link_libraries(souvenir_py PRIVATE souvenir)
+  set_target_properties(souvenir_py PROPERTIES OUTPUT_NAME souvenir)
+  # local-build distribution: drop the module next to cli.py/tui.py
+  add_custom_command(TARGET souvenir_py POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:souvenir_py> ${CMAKE_CURRENT_SOURCE_DIR}/..)
+endif()
+
 option(SOUVENIR_BUILD_TESTS "" ${PROJECT_IS_TOP_LEVEL})
 
 if(SOUVENIR_BUILD_TESTS)
   enable_testing()
-  include(FetchContent)
   FetchContent_Declare(googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG v1.15.2 GIT_SHALLOW TRUE)

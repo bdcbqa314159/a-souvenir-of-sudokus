@@ -1,8 +1,10 @@
-"""a-souvenir-of-sudokus — engine.
+"""a-souvenir-of-sudokus — Python engine draft, retired to readable spec.
+
+The live backend is the C++ engine (engine/, compiled `souvenir` module) —
+the frontends import that. This file stays as the executable specification:
+same API, same JSON save-file contract (test_bindings.py cross-checks both).
 
 Pure logic, no I/O. Board = list of 81 ints, 0 = empty, row-major.
-Any frontend (CLI, browser, desktop) talks to this via Game + JSON.
-Kept deliberately flat and typed-by-convention: this is the spec for the C++ rewrite.
 """
 from __future__ import annotations
 

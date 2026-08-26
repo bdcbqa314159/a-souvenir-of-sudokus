@@ -104,6 +104,40 @@ TEST(GameFlow, PutGivensMarksHint) {
   EXPECT_TRUE(g.is_solved());
 }
 
+TEST(GameFlow, StateRestoreAndClearMarks) {
+  Game g = Game::new_game(Difficulty::kEasy, 3);
+  int empty = 0;
+  while (g.is_given(empty))
+    ++empty;
+  g.toggle_mark(empty, 4);
+  g.clear_marks(empty);
+  EXPECT_EQ(g.marks(empty), 0u);
+
+  Board board = g.board();
+  std::array<std::uint16_t, kCells> marks{};
+  marks[static_cast<std::size_t>(empty)] = 1u << 6;
+  g.set_board(board);
+  g.set_marks(marks);
+  EXPECT_EQ(g.marks(empty), 1u << 6);
+
+  Board bad = board;
+  bad[0] = 12;
+  EXPECT_THROW(g.set_board(bad), std::invalid_argument);
+  marks[0] = 1; // bit 0 is not a digit
+  EXPECT_THROW(g.set_marks(marks), std::invalid_argument);
+  EXPECT_THROW(g.clear_marks(81), std::invalid_argument);
+}
+
+TEST(Peers, TopologyExposed) {
+  const auto &p = souvenir::peers();
+  for (int i = 0; i < kCells; ++i)
+    EXPECT_EQ(p[static_cast<std::size_t>(i)].size(), 20u);
+  // cell 0 sees its row, column and box
+  EXPECT_NE(std::find(p[0].begin(), p[0].end(), 8), p[0].end());  // row
+  EXPECT_NE(std::find(p[0].begin(), p[0].end(), 72), p[0].end()); // column
+  EXPECT_NE(std::find(p[0].begin(), p[0].end(), 20), p[0].end()); // box
+}
+
 TEST(Json, RoundTripPreservesEverything) {
   Game g = Game::new_game(Difficulty::kHard, 11);
   int empty = 0;

@@ -106,8 +106,12 @@ std::mt19937_64 make_rng(std::optional<std::uint64_t> seed) {
   return std::mt19937_64{seed ? *seed : std::random_device{}()};
 }
 
-int clue_target(Difficulty d) {
-  switch (d) {
+} // namespace
+
+const std::array<std::vector<int>, kCells> &peers() { return topology().peers; }
+
+int clue_target(Difficulty difficulty) {
+  switch (difficulty) {
   case Difficulty::kEasy:
     return 40;
   case Difficulty::kMedium:
@@ -117,8 +121,6 @@ int clue_target(Difficulty d) {
   }
   throw std::invalid_argument("unknown difficulty");
 }
-
-} // namespace
 
 bool consistent(const Board &board) {
   for (const auto &unit : topology().units) {
@@ -237,6 +239,26 @@ void Game::toggle_mark(int i, int v) {
   if (v < 1 || v > 9)
     throw std::invalid_argument("mark must be 1-9");
   marks_[static_cast<std::size_t>(i)] ^= static_cast<std::uint16_t>(1u << v);
+}
+
+void Game::clear_marks(int i) {
+  if (i < 0 || i >= kCells)
+    throw std::invalid_argument("cell index out of range");
+  marks_[static_cast<std::size_t>(i)] = 0;
+}
+
+void Game::set_board(const Board &board) {
+  for (int v : board)
+    if (v < 0 || v > 9)
+      throw std::invalid_argument("value must be 0-9");
+  board_ = board;
+}
+
+void Game::set_marks(const std::array<std::uint16_t, kCells> &marks) {
+  for (auto m : marks)
+    if ((m & ~static_cast<unsigned>(kDigitMask)) != 0)
+      throw std::invalid_argument("marks must be 1-9");
+  marks_ = marks;
 }
 
 std::vector<int> Game::wrong_cells() const {
