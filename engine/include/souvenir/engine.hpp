@@ -1,12 +1,14 @@
 // a-souvenir-of-sudokus — C++ engine.
 // Pure logic, no I/O. Board = 81 ints, 0 = empty, row-major.
-// The JSON form of Game is the frontend contract, byte-compatible with the
-// Python draft engine (sudoku.py) so save files are interchangeable.
+// The JSON form of Game is the frontend contract, semantically interchangeable
+// with the Python spec engine (sudoku.py): same schema and values, either
+// engine loads the other's saves. Key order and whitespace may differ.
 #pragma once
 
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -53,7 +55,11 @@ public:
   const Board &board() const { return board_; }
   Difficulty difficulty() const { return difficulty_; }
 
-  bool is_given(int i) const { return puzzle_[static_cast<std::size_t>(i)] != 0; }
+  bool is_given(int i) const {
+    if (i < 0 || i >= kCells)
+      throw std::invalid_argument("cell index out of range");
+    return puzzle_[static_cast<std::size_t>(i)] != 0;
+  }
   void put(int i, int v);         // v = 0 clears; erases the cell's marks, prunes peer marks
   void toggle_mark(int i, int v); // pencil mark, only on empty non-given cells
   void clear_marks(int i);        // erase every pencil mark in one cell

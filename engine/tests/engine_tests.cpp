@@ -76,6 +76,8 @@ TEST(GameFlow, PutGivensMarksHint) {
   EXPECT_THROW(g.put(given, 5), std::invalid_argument);
   EXPECT_THROW(g.put(-1, 5), std::invalid_argument);
   EXPECT_THROW(g.toggle_mark(given, 1), std::invalid_argument);
+  EXPECT_THROW(g.is_given(-1), std::invalid_argument);
+  EXPECT_THROW(g.is_given(81), std::invalid_argument);
 
   g.toggle_mark(empty, 7);
   g.toggle_mark(empty, 3);
@@ -180,7 +182,12 @@ TEST(Json, MalformedRejected) {
   corrupt([](nlohmann::json &c) { c["solution"][0] = 0; });       // unsolved solution
   corrupt([](nlohmann::json &c) { c["marks"][0] = {0}; });        // bad mark digit
   corrupt([](nlohmann::json &c) { c["difficulty"] = "expert"; }); // unknown difficulty
-  corrupt([](nlohmann::json &c) {                                 // puzzle contradicts solution
+  corrupt([](nlohmann::json &c) { c["difficulty"] = 5; });        // non-string difficulty
+  // 64-bit values that would wrap into range if narrowed to int32 before checking
+  corrupt([](nlohmann::json &c) { c["board"][0] = 4294967301ULL; });   // 2^32 + 5
+  corrupt([](nlohmann::json &c) { c["solution"][0] = -4294967287; });  // -2^32 + 9
+  corrupt([](nlohmann::json &c) { c["marks"][0] = {4294967299ULL}; }); // 2^32 + 3
+  corrupt([](nlohmann::json &c) { // puzzle contradicts solution
     for (int i = 0; i < kCells; ++i) {
       int s = c["solution"][static_cast<std::size_t>(i)].get<int>();
       c["puzzle"][static_cast<std::size_t>(i)] = 10 - s;
