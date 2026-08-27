@@ -64,6 +64,19 @@ def main() -> None:
         raise AssertionError("bad save must fail")
     except ValueError:
         pass
+    wrapped = json.loads(cpp.to_json())
+    wrapped["board"][0] = 2**32 + 5  # would wrap to 5 if narrowed before range check
+    for engine in (souvenir, sudoku):
+        try:
+            engine.Game.from_json(json.dumps(wrapped))
+            raise AssertionError("wrapped 64-bit value must fail in both engines")
+        except ValueError:
+            pass
+    try:
+        cpp.is_given(-1)
+        raise AssertionError("out-of-range is_given must raise, not crash")
+    except ValueError:
+        pass
 
     # frontends import against the compiled module
     from cli import idx

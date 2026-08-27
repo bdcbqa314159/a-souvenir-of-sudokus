@@ -141,9 +141,16 @@ std::optional<Board> solve(const Board &board, std::optional<std::uint64_t> seed
   if (!consistent(board))
     return std::nullopt;
   Board b = board;
-  auto rng = make_rng(seed);
-  if (!backtrack(b, seed ? &rng : nullptr))
-    return std::nullopt;
+  if (seed) {
+    std::mt19937_64 rng{*seed};
+    if (!backtrack(b, &rng))
+      return std::nullopt;
+  } else {
+    // no rng at all: unseeded solve is deterministic and must not touch
+    // std::random_device (whose constructor may throw without an entropy source)
+    if (!backtrack(b, nullptr))
+      return std::nullopt;
+  }
   return b;
 }
 
@@ -309,15 +316,25 @@ Game Game::from_json(const std::string &text) {
   if (j.is_discarded() || !j.is_object())
     throw std::invalid_argument("bad save file: not JSON");
 
+  // Range-check on the wide type BEFORE narrowing — get<int>() would wrap
+  // 2^32+5 to 5 and let malformed saves through. Values > INT64_MAX arrive
+  // negative here (or as floats, already rejected) and fail the range check.
+  auto digit = [](const nlohmann::json &v, int lo) -> int {
+    if (!v.is_number_integer())
+      return -1;
+    const std::int64_t n = v.get<std::int64_t>();
+    return (n < lo || n > 9) ? -1 : static_cast<int>(n);
+  };
+
   auto grid = [&](const char *key) {
     Board out{};
     if (!j.contains(key) || !j[key].is_array() || j[key].size() != kCells)
       throw std::invalid_argument(std::string("bad save file: ") + key);
     for (int i = 0; i < kCells; ++i) {
-      const auto &v = j[key][static_cast<std::size_t>(i)];
-      if (!v.is_number_integer() || v.get<int>() < 0 || v.get<int>() > 9)
+      int v = digit(j[key][static_cast<std::size_t>(i)], 0);
+      if (v < 0)
         throw std::invalid_argument(std::string("bad save file: ") + key);
-      out[static_cast<std::size_t>(i)] = v.get<int>();
+      out[static_cast<std::size_t>(i)] = v;
     }
     return out;
   };
@@ -333,9 +350,12 @@ Game Game::from_json(const std::string &text) {
       throw std::invalid_argument("bad save file: puzzle/solution mismatch");
   }
 
-  Difficulty d = j.contains("difficulty") && j["difficulty"].is_string()
-                     ? difficulty_from_string(j["difficulty"].get<std::string>())
-                     : Difficulty::kMedium;
+  Difficulty d = Difficulty::kMedium;
+  if (j.contains("difficulty")) {
+    if (!j["difficulty"].is_string())
+      throw std::invalid_argument("bad save file: difficulty");
+    d = difficulty_from_string(j["difficulty"].get<std::string>());
+  }
   Game g(puzzle, solution, d);
   g.board_ = board;
   if (j.contains("marks")) {
@@ -346,9 +366,10 @@ Game Game::from_json(const std::string &text) {
       if (!cell.is_array())
         throw std::invalid_argument("bad save file: marks");
       for (const auto &v : cell) {
-        if (!v.is_number_integer() || v.get<int>() < 1 || v.get<int>() > 9)
+        int m = digit(v, 1);
+        if (m < 0)
           throw std::invalid_argument("bad save file: marks");
-        g.marks_[static_cast<std::size_t>(i)] |= static_cast<std::uint16_t>(1u << v.get<int>());
+        g.marks_[static_cast<std::size_t>(i)] |= static_cast<std::uint16_t>(1u << m);
       }
     }
   }
