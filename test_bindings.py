@@ -89,13 +89,20 @@ def main() -> None:
         except ValueError:
             pass
 
-    from tui import conflicts
+    from tui import auto_candidates, conflicts
 
     b = [0] * 81
     b[0] = b[8] = 5
     assert conflicts(b) == {0, 8}
     b[8] = 6
     assert conflicts(b) == set()
+
+    cands = auto_candidates(b)
+    assert cands[0] == set() and cands[8] == set()  # filled cells get no marks
+    assert cands[1] == set(range(1, 10)) - {5, 6}  # same row as the 5 and the 6
+    assert 5 not in cands[9] and 5 not in cands[10]  # column and box of the 5
+    full = souvenir.solve([0] * 81, 1)
+    assert auto_candidates(full) == [set()] * 81
 
     print("all binding checks passed")
 
