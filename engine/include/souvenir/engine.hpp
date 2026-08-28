@@ -42,6 +42,10 @@ struct Generated {
 // Puzzle always has exactly one solution.
 Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed = std::nullopt);
 
+// Dig toward an explicit clue count (17..81, throws outside); the result may hold
+// more clues than asked when digging further would break solution uniqueness.
+Generated generate_with_clues(int clue_target, std::optional<std::uint64_t> seed = std::nullopt);
+
 // One playing session. Errors are std::invalid_argument, mirroring ValueError in Python.
 class Game {
 public:
@@ -90,5 +94,11 @@ private:
   std::array<std::uint16_t, kCells> marks_{};
   Difficulty difficulty_;
 };
+
+// The phantom flip: a fresh puzzle whose given count equals the game's currently
+// correct cell count (givens + correct entries), so the player's coverage carries
+// over. Counts below 17 are clamped up — gameplay must go on. Difficulty label is
+// preserved; board resets to the new givens, marks cleared.
+Game phantom_of(const Game &game, std::optional<std::uint64_t> seed = std::nullopt);
 
 } // namespace souvenir
