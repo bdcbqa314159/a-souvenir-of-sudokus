@@ -4,6 +4,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <souvenir/api.hpp>
 #include <souvenir/engine.hpp>
 
 namespace py = pybind11;
@@ -21,6 +22,20 @@ PYBIND11_MODULE(souvenir, m) {
       [](const Board &b, std::optional<std::uint64_t> seed) { return souvenir::solve(b, seed); },
       py::arg("board"), py::arg("seed") = py::none());
   m.def("count_solutions", &souvenir::count_solutions, py::arg("board"), py::arg("limit") = 2);
+  m.def("apply_command", &souvenir::apply_command, py::arg("request"));
+  m.def(
+      "generate_with_clues",
+      [](int clues, std::optional<std::uint64_t> seed) {
+        auto g = souvenir::generate_with_clues(clues, seed);
+        return py::make_tuple(g.puzzle, g.solution);
+      },
+      py::arg("clue_target"), py::arg("seed") = py::none());
+  m.def(
+      "phantom_of",
+      [](const Game &g, std::optional<std::uint64_t> seed) {
+        return souvenir::phantom_of(g, seed);
+      },
+      py::arg("game"), py::arg("seed") = py::none());
   m.def(
       "generate",
       [](const std::string &difficulty, std::optional<std::uint64_t> seed) {

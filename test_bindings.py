@@ -78,6 +78,28 @@ def main() -> None:
     except ValueError:
         pass
 
+    # flipper primitives
+    puzzle30, sol30 = souvenir.generate_with_clues(30, seed=9)
+    assert sum(1 for v in puzzle30 if v) >= 30 and souvenir.count_solutions(puzzle30) == 1
+    fg = souvenir.Game.new("medium", 4)
+    filled = next(i for i in range(81) if not fg.is_given(i) and fg.board[i] == 0)
+    fg.put(filled, fg.solution[filled])
+    correct = sum(1 for i in range(81) if fg.board[i] and fg.board[i] == fg.solution[i])
+    ph = souvenir.phantom_of(fg, seed=7)
+    assert sum(1 for v in ph.puzzle if v) >= correct
+    assert ph.board == ph.puzzle and ph.difficulty == "medium"
+
+    # JSON command surface
+    rsp = json.loads(souvenir.apply_command(json.dumps({"cmd": "new", "difficulty": "easy", "seed": 42})))
+    assert rsp["ok"] and not rsp["solved"]
+    game = rsp["game"]
+    i0 = next(i for i in range(81) if game["puzzle"][i] == 0)
+    rsp = json.loads(souvenir.apply_command(json.dumps(
+        {"cmd": "put", "game": game, "i": i0, "v": game["solution"][i0]})))
+    assert rsp["ok"] and rsp["game"]["board"][i0] == game["solution"][i0]
+    rsp = json.loads(souvenir.apply_command("not json"))
+    assert not rsp["ok"] and "error" in rsp
+
     # frontends import against the compiled module
     from cli import idx
 

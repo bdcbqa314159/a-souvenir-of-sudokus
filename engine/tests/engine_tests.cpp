@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <nlohmann/json.hpp>
+#include <souvenir/api.hpp>
 #include <souvenir/engine.hpp>
 
 using souvenir::Board;
@@ -57,6 +58,101 @@ TEST(Generate, SeedReproducible) {
   auto b = souvenir::generate(Difficulty::kMedium, 7);
   EXPECT_EQ(a.puzzle, b.puzzle);
   EXPECT_EQ(a.solution, b.solution);
+}
+
+TEST(Generate, ExplicitClueTarget) {
+  for (int target : {17, 30, 55}) {
+    auto g = souvenir::generate_with_clues(target, 9);
+    EXPECT_EQ(souvenir::count_solutions(g.puzzle), 1);
+    EXPECT_GE(clue_count(g.puzzle), target);
+    EXPECT_EQ(souvenir::solve(g.puzzle), g.solution);
+  }
+  auto full = souvenir::generate_with_clues(81, 9);
+  EXPECT_EQ(full.puzzle, full.solution);
+  EXPECT_THROW(souvenir::generate_with_clues(16, 9), std::invalid_argument);
+  EXPECT_THROW(souvenir::generate_with_clues(82, 9), std::invalid_argument);
+}
+
+TEST(Phantom, PreservesCoverage) {
+  Game g = Game::new_game(Difficulty::kMedium, 4);
+  // fill five empty cells correctly, one wrongly
+  int placed = 0;
+  for (int i = 0; i < kCells && placed < 6; ++i)
+    if (!g.is_given(i) && g.board()[static_cast<std::size_t>(i)] == 0) {
+      int right = g.solution()[static_cast<std::size_t>(i)];
+      g.put(i, placed < 5 ? right : (right % 9) + 1); // 6th entry is wrong
+      ++placed;
+    }
+  int correct = 0;
+  for (int i = 0; i < kCells; ++i) {
+    auto u = static_cast<std::size_t>(i);
+    if (g.board()[u] != 0 && g.board()[u] == g.solution()[u])
+      ++correct;
+  }
+  Game p = souvenir::phantom_of(g, 7);
+  EXPECT_GE(clue_count(p.puzzle()), correct); // >=: uniqueness may block digging
+  EXPECT_EQ(souvenir::count_solutions(p.puzzle()), 1);
+  EXPECT_EQ(p.board(), p.puzzle()); // fresh board, wrong entry gone
+  EXPECT_EQ(p.difficulty(), g.difficulty());
+  for (int i = 0; i < kCells; ++i)
+    EXPECT_EQ(p.marks(i), 0u);
+}
+
+TEST(Api, CommandRoundTrip) {
+  using nlohmann::json;
+  auto call = [](json req) { return json::parse(souvenir::apply_command(req.dump())); };
+
+  json rsp = call({{"cmd", "new"}, {"difficulty", "easy"}, {"seed", 42}});
+  ASSERT_TRUE(rsp["ok"].get<bool>());
+  EXPECT_FALSE(rsp["solved"].get<bool>());
+  json game = rsp["game"];
+
+  int empty = 0;
+  while (game["puzzle"][static_cast<std::size_t>(empty)].get<int>() != 0)
+    ++empty;
+  int right = game["solution"][static_cast<std::size_t>(empty)].get<int>();
+  rsp = call({{"cmd", "put"}, {"game", game}, {"i", empty}, {"v", right}});
+  ASSERT_TRUE(rsp["ok"].get<bool>());
+  EXPECT_EQ(rsp["game"]["board"][static_cast<std::size_t>(empty)].get<int>(), right);
+
+  rsp = call({{"cmd", "check"}, {"game", rsp["game"]}});
+  EXPECT_TRUE(rsp["wrong"].empty());
+
+  rsp = call({{"cmd", "hint"}, {"game", game}, {"seed", 1}});
+  ASSERT_TRUE(rsp["ok"].get<bool>());
+  EXPECT_TRUE(rsp["index"].is_number_integer());
+
+  rsp = call({{"cmd", "candidates"}, {"game", game}});
+  ASSERT_TRUE(rsp["ok"].get<bool>());
+  EXPECT_EQ(rsp["candidates"].size(), 81u);
+  for (int d : rsp["candidates"][static_cast<std::size_t>(empty)])
+    EXPECT_TRUE(1 <= d && d <= 9);
+
+  rsp = call({{"cmd", "phantom"}, {"game", game}, {"seed", 3}});
+  ASSERT_TRUE(rsp["ok"].get<bool>());
+  EXPECT_EQ(rsp["game"]["difficulty"], "easy");
+}
+
+TEST(Api, ErrorsNeverThrow) {
+  using nlohmann::json;
+  for (const std::string &req :
+       {std::string("not json"), std::string("{}"), json{{"cmd", "fly"}}.dump(),
+        json{{"cmd", "put"}, {"i", 0}, {"v", 1}}.dump(),       // missing game
+        json{{"cmd", "new"}, {"difficulty", "expert"}}.dump(), // bad difficulty
+        json{{"cmd", "new"}, {"seed", -4}}.dump()}) {          // negative seed
+    json rsp = json::parse(souvenir::apply_command(req));
+    EXPECT_FALSE(rsp["ok"].get<bool>()) << req;
+    EXPECT_TRUE(rsp["error"].is_string()) << req;
+  }
+  // put on a given surfaces as an error response, not an exception
+  json game =
+      json::parse(souvenir::apply_command(json{{"cmd", "new"}, {"seed", 42}}.dump()))["game"];
+  int given = 0;
+  while (game["puzzle"][static_cast<std::size_t>(given)].get<int>() == 0)
+    ++given;
+  json rsp = json::parse(
+      souvenir::apply_command(json{{"cmd", "put"}, {"game", game}, {"i", given}, {"v", 5}}.dump()));
+  EXPECT_FALSE(rsp["ok"].get<bool>());
 }
 
 TEST(DifficultyNames, RoundTripAndRejection) {

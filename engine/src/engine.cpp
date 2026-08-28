@@ -185,7 +185,9 @@ std::string to_string(Difficulty difficulty) {
   throw std::invalid_argument("unknown difficulty");
 }
 
-Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed) {
+Generated generate_with_clues(int clue_target, std::optional<std::uint64_t> seed) {
+  if (clue_target < 17 || clue_target > kCells) // 17 = minimum clues of any unique sudoku
+    throw std::invalid_argument("clue target must be 17-81");
   auto rng = make_rng(seed);
   Board full{};
   backtrack(full, &rng); // empty board is consistent; always succeeds
@@ -195,9 +197,8 @@ Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed) {
     order[static_cast<std::size_t>(i)] = i;
   std::shuffle(order.begin(), order.end(), rng);
   int clues = kCells;
-  int target = clue_target(difficulty);
   for (int i : order) {
-    if (clues <= target)
+    if (clues <= clue_target)
       break;
     int saved = puzzle[static_cast<std::size_t>(i)];
     puzzle[static_cast<std::size_t>(i)] = 0;
@@ -208,6 +209,21 @@ Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed) {
     }
   }
   return {puzzle, full};
+}
+
+Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed) {
+  return generate_with_clues(clue_target(difficulty), seed);
+}
+
+Game phantom_of(const Game &game, std::optional<std::uint64_t> seed) {
+  int correct = 0;
+  for (int i = 0; i < kCells; ++i) {
+    auto u = static_cast<std::size_t>(i);
+    if (game.board()[u] != 0 && game.board()[u] == game.solution()[u])
+      ++correct;
+  }
+  Generated g = generate_with_clues(std::max(correct, 17), seed);
+  return Game(g.puzzle, g.solution, game.difficulty());
 }
 
 Game::Game(const Board &puzzle, const Board &solution, Difficulty difficulty)
