@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(EMSCRIPTEN)
+  # native wasm exception handling — the engine's error paths are exceptions
+  add_compile_options(-fwasm-exceptions)
+  add_link_options(-fwasm-exceptions)
+endif()
+
 add_library(souvenir src/engine.cpp src/api.cpp)
 add_library(souvenir::souvenir ALIAS souvenir)
 # static lib links into the Python shared module — must be PIC on Linux/GCC
@@ -41,7 +47,24 @@ if(SOUVENIR_BUILD_PYTHON)
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:souvenir_py> ${CMAKE_CURRENT_SOURCE_DIR}/..)
 endif()
 
-option(SOUVENIR_BUILD_TESTS "" ${PROJECT_IS_TOP_LEVEL})
+if(EMSCRIPTEN)
+  add_executable(souvenir_wasm bindings/souvenir_wasm.cpp)
+  target_link_libraries(souvenir_wasm PRIVATE souvenir)
+  set_target_properties(souvenir_wasm PROPERTIES OUTPUT_NAME souvenir SUFFIX ".js")
+  target_link_options(souvenir_wasm PRIVATE
+    -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createSouvenir
+    -sEXPORTED_FUNCTIONS=_souvenir_cmd
+    -sEXPORTED_RUNTIME_METHODS=cwrap
+    -sALLOW_MEMORY_GROWTH=1
+    --no-entry)
+endif()
+
+if(EMSCRIPTEN) # no googletest/python under the wasm toolchain
+  set(SOUVENIR_DEFAULT_TESTS OFF)
+else()
+  set(SOUVENIR_DEFAULT_TESTS ${PROJECT_IS_TOP_LEVEL})
+endif()
+option(SOUVENIR_BUILD_TESTS "" ${SOUVENIR_DEFAULT_TESTS})
 
 if(SOUVENIR_BUILD_TESTS)
   enable_testing()
