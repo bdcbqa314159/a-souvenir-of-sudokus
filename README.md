@@ -44,10 +44,30 @@ ctest --preset release
 
 Presets: `debug` · `release` · `asan` (non-Windows).
 
+### Browser engine (wasm)
+
+The whole engine compiles to WebAssembly behind one function —
+`souvenir_cmd(requestJson) → responseJson` (command set in
+`engine/include/souvenir/api.hpp`). Emscripten is pinned locally in the
+gitignored `.emsdk/` (same version as CI):
+
+```
+git clone --depth 1 https://github.com/emscripten-core/emsdk.git .emsdk
+./.emsdk/emsdk install 3.1.64 && ./.emsdk/emsdk activate 3.1.64
+source .emsdk/emsdk_env.sh
+
+emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
+cmake --build engine/build/wasm -j
+node test_wasm.mjs
+```
+
 ## Roadmap
 
 - [x] Python engine draft (generator with guaranteed-unique solutions, solver, game state)
 - [x] CLI frontend (REPL + vim-style curses TUI)
 - [x] C++ engine (`engine/` — library + tests)
 - [x] pybind11 bindings; frontends run on the compiled engine (local build; packaging when the project is final)
-- [ ] Renderer(s) — browser first, from the handwritten-grid photographs
+- [x] Engine in the browser: wasm build with the JSON command surface
+- [ ] Browser frontend: Rust (Leptos → wasm), asset-pack driven, placeholder pack first
+- [ ] `atelier/`: photos of the handwritten grids → the final asset pack
+- [ ] Renderer finale — the handwritten digits become the game's font

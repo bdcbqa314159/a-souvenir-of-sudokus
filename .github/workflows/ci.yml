@@ -32,6 +32,19 @@ jobs:
       - run: python3 test_sudoku.py
       - run: python3 test_bindings.py
 
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64 # keep == the version pinned in .emsdk locally
+      - name: Build wasm engine
+        run: |
+          emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build engine/build/wasm -j
+      - run: node test_wasm.mjs
+
   format-check:
     runs-on: ubuntu-latest
     continue-on-error: true
