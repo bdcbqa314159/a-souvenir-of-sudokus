@@ -83,7 +83,7 @@ node test_wasm.mjs
 - [x] pybind11 bindings; frontends run on the compiled engine (local build; packaging when the project is final)
 - [x] Engine in the browser: wasm build with the JSON command surface
 - [x] Browser frontend: Rust (Leptos → wasm), asset-pack driven, placeholder pack first
-- [ ] Button-bar UX polish in the browser frontend
+- [x] Button-bar UX: handwritten digit palette, grouped rows, segmented difficulty
 - [x] Phantom mode core: stall clock (difficulty-scaled), flips via `phantom_of`, 3 lives
 - [x] Phantom grace window (correct placement wards off the flip)
 - [x] Phantom overlay: incoming givens fade in, flip becomes a crossfade

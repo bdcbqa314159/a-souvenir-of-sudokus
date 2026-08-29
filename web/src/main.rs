@@ -23,6 +23,7 @@ extern "C" {
 const PACK: &str = "assets/placeholder";
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const LIVES: u32 = 3;
+const DIGIT_KEYS: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
@@ -426,46 +427,88 @@ fn App() -> impl IntoView {
             .unwrap_or(false)
     };
 
+    // the palette: 1-9 in his (placeholder, for now) red handwriting — click to
+    // write, exactly like typing the key. A digit fully placed on the board dims.
+    let palette = move || {
+        let man = manifest.get()?;
+        let placed: Vec<usize> = game
+            .get()
+            .map(|g| {
+                let board = board_of(&g, "board");
+                (1..=9)
+                    .map(|d| board.iter().filter(|v| **v == d).count())
+                    .collect()
+            })
+            .unwrap_or_else(|| vec![0; 9]);
+        Some(
+            (1..=9usize)
+                .map(|d| {
+                    let done = placed[d - 1] >= 9;
+                    let src = digit_src(&man, "user", d as i64, d * 7);
+                    view! {
+                        <button class="digit" class:done=move || done
+                            on:click=move |_| key_action(DIGIT_KEYS[d - 1])>
+                            {src.map(|s| view! { <img src=s /> })}
+                        </button>
+                    }
+                })
+                .collect::<Vec<_>>(),
+        )
+    };
+
+    let toggle_phantom = move |_| {
+        mode.update(|m| *m = if *m == Mode::Phantom { Mode::Classic } else { Mode::Phantom });
+        lives.set(LIVES);
+        phantom_over.set(false);
+        haunt_start.set(None);
+        incoming.set(None);
+        last_progress.set(js_sys::Date::now());
+        msg.set(if mode.get_untracked() == Mode::Phantom {
+            "phantom mode — keep placing right, or the sudoku flips".into()
+        } else {
+            String::new()
+        });
+    };
+    let current_diff =
+        move || game.get().and_then(|g| g["difficulty"].as_str().map(String::from)).unwrap_or_default();
+
     view! {
         <h1>"a-souvenir-of-sudokus"</h1>
         <div class="grid" class:flipping=move || flip_anim.get()>{cells}</div>
+        <div class="bar palette">
+            {palette}
+            <button class="digit erase" title="erase" on:click=move |_| key_action("x")>"⌫"</button>
+        </div>
         <div class="bar">
-            <button on:click=move |_| key_action("n")>"new"</button>
-            {DIFFICULTIES
-                .iter()
-                .map(|d| {
-                    let d = d.to_string();
-                    let label = d.clone();
-                    view! { <button on:click=move |_| new_game(d.clone())>{label}</button> }
-                })
-                .collect::<Vec<_>>()}
-            <button
-                class:on=move || mode.get() == Mode::Phantom
-                on:click=move |_| {
-                    mode.update(|m| {
-                        *m = if *m == Mode::Phantom { Mode::Classic } else { Mode::Phantom };
-                    });
-                    lives.set(LIVES);
-                    phantom_over.set(false);
-                    haunt_start.set(None);
-                    incoming.set(None);
-                    last_progress.set(js_sys::Date::now());
-                    msg.set(
-                        if mode.get_untracked() == Mode::Phantom {
-                            "phantom mode — keep placing right, or the sudoku flips".into()
-                        } else {
-                            String::new()
-                        },
-                    );
-                }
-            >
-                "phantom"
-            </button>
             <button class:on=move || pencil.get() on:click=move |_| key_action("m")>"pencil"</button>
             <button on:click=move |_| key_action("H")>"hint"</button>
             <button on:click=move |_| key_action("c")>"check"</button>
             <button on:click=move |_| key_action("u")>"undo"</button>
             <button on:click=move |_| key_action("r")>"redo"</button>
+        </div>
+        <div class="bar setup">
+            <button on:click=move |_| key_action("n")>"new game"</button>
+            <span class="seg">
+                {DIFFICULTIES
+                    .iter()
+                    .map(|d| {
+                        let d = d.to_string();
+                        let label = d.clone();
+                        let is_current = {
+                            let d = d.clone();
+                            move || current_diff() == d
+                        };
+                        view! {
+                            <button class:on=is_current on:click=move |_| new_game(d.clone())>
+                                {label}
+                            </button>
+                        }
+                    })
+                    .collect::<Vec<_>>()}
+            </span>
+            <button class:on=move || mode.get() == Mode::Phantom on:click=toggle_phantom>
+                "phantom"
+            </button>
         </div>
         <div class="msg" class:solved=solved>{move || msg.get()}</div>
         <div class="status">{status}</div>
