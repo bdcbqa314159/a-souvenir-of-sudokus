@@ -30,12 +30,21 @@ enum Mode {
     Phantom,
 }
 
-/// Time without a correct placement before the sudoku phantoms, per difficulty.
+/// Time without a correct placement before the haunting begins, per difficulty.
 fn stall_ms(difficulty: &str) -> f64 {
     match difficulty {
         "easy" => 90_000.0,
         "hard" => 45_000.0,
         _ => 60_000.0,
+    }
+}
+
+/// The grace window: once haunted, how long you have to place a correct number.
+fn window_ms(difficulty: &str) -> f64 {
+    match difficulty {
+        "easy" => 20_000.0,
+        "hard" => 12_000.0,
+        _ => 15_000.0,
     }
 }
 
@@ -82,6 +91,7 @@ fn App() -> impl IntoView {
     let last_progress = RwSignal::new(js_sys::Date::now());
     let now = RwSignal::new(js_sys::Date::now());
     let phantom_over = RwSignal::new(false);
+    let haunt_start: RwSignal<Option<f64>> = RwSignal::new(None);
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -122,8 +132,25 @@ fn App() -> impl IntoView {
                 continue; // solved — the phantoms lost
             }
             let diff = g["difficulty"].as_str().unwrap_or("medium").to_string();
-            if js_sys::Date::now() - last_progress.get_untracked() < stall_ms(&diff) {
-                continue;
+            match haunt_start.get_untracked() {
+                None => {
+                    // calm: has the stall clock run out? then the haunting begins
+                    if js_sys::Date::now() - last_progress.get_untracked() >= stall_ms(&diff) {
+                        haunt_start.set(Some(js_sys::Date::now()));
+                        msg.set(format!(
+                            "the phantom is coming — place a correct number within {}s to hold it off",
+                            (window_ms(&diff) / 1000.0) as u64
+                        ));
+                    }
+                    continue;
+                }
+                Some(t0) => {
+                    // haunting: still inside the grace window?
+                    if js_sys::Date::now() - t0 < window_ms(&diff) {
+                        continue;
+                    }
+                    haunt_start.set(None); // window expired — the flip goes through
+                }
             }
             let mut req = json!({"cmd": "phantom"});
             req["game"] = g;
@@ -173,6 +200,7 @@ fn App() -> impl IntoView {
             history.set(History::default());
             lives.set(LIVES);
             phantom_over.set(false);
+            haunt_start.set(None);
             last_progress.set(js_sys::Date::now());
             msg.set(format!("new {difficulty} game"));
         }
@@ -253,6 +281,10 @@ fn App() -> impl IntoView {
                     if let Some(g) = game.get_untracked() {
                         if board_of(&g, "board")[i] == v && board_of(&g, "solution")[i] == v {
                             last_progress.set(js_sys::Date::now());
+                            if haunt_start.get_untracked().is_some() {
+                                haunt_start.set(None);
+                                msg.set("the phantom recedes…".into());
+                            }
                         }
                     }
                 }
@@ -336,13 +368,22 @@ fn App() -> impl IntoView {
                 let mut s =
                     format!("{diff} · {filled}/81 · {}", if pencil.get() { "pencil" } else { "pen" });
                 if mode.get() == Mode::Phantom {
-                    let remain =
-                        ((stall_ms(&diff) - (now.get() - last_progress.get())) / 1000.0).max(0.0);
-                    s.push_str(&format!(
-                        " · {} · phantom in {}s",
-                        "♥".repeat(lives.get() as usize),
-                        remain as u64
-                    ));
+                    let hearts = "♥".repeat(lives.get() as usize);
+                    match haunt_start.get() {
+                        Some(t0) => {
+                            let remain = ((window_ms(&diff) - (now.get() - t0)) / 1000.0).max(0.0);
+                            s.push_str(&format!(
+                                " · {hearts} · ⚠ HAUNTED — {}s to place a number",
+                                remain as u64
+                            ));
+                        }
+                        None => {
+                            let remain = ((stall_ms(&diff) - (now.get() - last_progress.get()))
+                                / 1000.0)
+                                .max(0.0);
+                            s.push_str(&format!(" · {hearts} · phantom in {}s", remain as u64));
+                        }
+                    }
                 }
                 s
             })
@@ -375,6 +416,7 @@ fn App() -> impl IntoView {
                     });
                     lives.set(LIVES);
                     phantom_over.set(false);
+                    haunt_start.set(None);
                     last_progress.set(js_sys::Date::now());
                     msg.set(
                         if mode.get_untracked() == Mode::Phantom {
