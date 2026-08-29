@@ -1,0 +1,99 @@
+{
+ "name": "placeholder",
+ "digits": {
+  "given": {
+   "1": [
+    "digits/given/1_a.svg",
+    "digits/given/1_b.svg",
+    "digits/given/1_c.svg"
+   ],
+   "2": [
+    "digits/given/2_a.svg",
+    "digits/given/2_b.svg",
+    "digits/given/2_c.svg"
+   ],
+   "3": [
+    "digits/given/3_a.svg",
+    "digits/given/3_b.svg",
+    "digits/given/3_c.svg"
+   ],
+   "4": [
+    "digits/given/4_a.svg",
+    "digits/given/4_b.svg",
+    "digits/given/4_c.svg"
+   ],
+   "5": [
+    "digits/given/5_a.svg",
+    "digits/given/5_b.svg",
+    "digits/given/5_c.svg"
+   ],
+   "6": [
+    "digits/given/6_a.svg",
+    "digits/given/6_b.svg",
+    "digits/given/6_c.svg"
+   ],
+   "7": [
+    "digits/given/7_a.svg",
+    "digits/given/7_b.svg",
+    "digits/given/7_c.svg"
+   ],
+   "8": [
+    "digits/given/8_a.svg",
+    "digits/given/8_b.svg",
+    "digits/given/8_c.svg"
+   ],
+   "9": [
+    "digits/given/9_a.svg",
+    "digits/given/9_b.svg",
+    "digits/given/9_c.svg"
+   ]
+  },
+  "user": {
+   "1": [
+    "digits/user/1_a.svg",
+    "digits/user/1_b.svg",
+    "digits/user/1_c.svg"
+   ],
+   "2": [
+    "digits/user/2_a.svg",
+    "digits/user/2_b.svg",
+    "digits/user/2_c.svg"
+   ],
+   "3": [
+    "digits/user/3_a.svg",
+    "digits/user/3_b.svg",
+    "digits/user/3_c.svg"
+   ],
+   "4": [
+    "digits/user/4_a.svg",
+    "digits/user/4_b.svg",
+    "digits/user/4_c.svg"
+   ],
+   "5": [
+    "digits/user/5_a.svg",
+    "digits/user/5_b.svg",
+    "digits/user/5_c.svg"
+   ],
+   "6": [
+    "digits/user/6_a.svg",
+    "digits/user/6_b.svg",
+    "digits/user/6_c.svg"
+   ],
+   "7": [
+    "digits/user/7_a.svg",
+    "digits/user/7_b.svg",
+    "digits/user/7_c.svg"
+   ],
+   "8": [
+    "digits/user/8_a.svg",
+    "digits/user/8_b.svg",
+    "digits/user/8_c.svg"
+   ],
+   "9": [
+    "digits/user/9_a.svg",
+    "digits/user/9_b.svg",
+    "digits/user/9_c.svg"
+   ]
+  }
+ }
+}

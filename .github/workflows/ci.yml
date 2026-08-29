@@ -45,6 +45,24 @@ jobs:
           cmake --build engine/build/wasm -j
       - run: node test_wasm.mjs
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64
+      - name: Build wasm engine
+        run: |
+          emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build engine/build/wasm -j
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/trunk-action@v0.5.0
+      - name: Build web frontend
+        run: cd web && trunk build --release
+
   format-check:
     runs-on: ubuntu-latest
     continue-on-error: true
