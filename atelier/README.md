@@ -37,3 +37,12 @@ Stages in detail:
   in the exact schema of `web/assets/placeholder/`.
 
 Play in his handwriting: `trunk serve` then open with `?pack=grandpere`.
+
+## Curation
+
+```
+.venv/bin/python pipeline.py review          # opens the matrix: green = in pack, blue = pinned
+.venv/bin/python pipeline.py label 0123=-1   # reject the worst by id
+.venv/bin/python pipeline.py pin 0456        # pinned glyphs always emit (unpin: pin -0456)
+.venv/bin/python pipeline.py emit            # regenerate the pack
+```

@@ -8,6 +8,10 @@ Stages (run in order; every output lands in originals/atelier-work/, gitignored)
   train     fit HOG+SVM on the labeled rows of meta.csv
   predict   label the rest with the SVM; write per-class sheets for verification
   emit      normalized RGBA glyphs -> web/assets/grandpere/ + manifest.json
+  review    open a curation matrix: every accepted glyph per class, indexed by
+            id; emitted variants outlined green, pinned ones blue
+  pin       pipeline.py pin 0012 0034 ...  (unpin: pin -0012) — pinned glyphs
+            always emit first
 
 Labels live in meta.csv (column `label`, 1-9, empty = unlabeled; -1 = rejected).
 Apply labels with:  pipeline.py label <id>=<digit> <id>=<digit> ...
@@ -251,10 +255,14 @@ def stage_emit(max_variants=10):
             if not cand:
                 continue
             # rank by typicality: pencil-mark residue fused above a digit inflates
-            # its height, so distance from the class median height demotes it
+            # its height, so distance from the class median height demotes it.
+            # Curated pins always come first.
             med = float(np.median([int(r["h"]) for r in cand]))
             cand.sort(
-                key=lambda r: abs(int(r["h"]) - med) / med - 0.3 * float(r.get("conf") or 1.0)
+                key=lambda r: (
+                    0 if r.get("pin") else 1,
+                    abs(int(r["h"]) - med) / med - 0.3 * float(r.get("conf") or 1.0),
+                )
             )
             paths = []
             for r in cand[:max_variants]:
@@ -278,6 +286,82 @@ def stage_emit(max_variants=10):
     print(f"emitted {total} glyphs -> {PACK}/manifest.json")
 
 
+def stage_pin(args):
+    rows = load_meta()
+    for r in rows:
+        r.setdefault("pin", "")
+    by_id = {r["id"]: r for r in rows}
+    for a in args:
+        if a.startswith("-"):
+            gid = a[1:]
+            if gid in by_id:
+                by_id[gid]["pin"] = ""
+        elif a in by_id:
+            by_id[a]["pin"] = "1"
+    save_meta(rows)
+    print(f"pinned: {[r['id'] for r in rows if r.get('pin')]}")
+
+
+def stage_review():
+    """The curation matrix: tell me the ids — worst get `label <id>=-1`,
+    keepers get `pin <id>` — then re-`emit`."""
+    import json as _json
+    import subprocess
+
+    rows = load_meta()
+    emitted = set()
+    manifest = PACK / "manifest.json"
+    if manifest.exists():
+        man = _json.loads(manifest.read_text())
+        for role in man["digits"].values():
+            for paths in role.values():
+                for p in paths:
+                    emitted.add(pathlib.Path(p).stem.split("_", 1)[1])
+
+    size, pad = 76, 20
+    paper = (232, 242, 247)  # BGR cream, close to the game's paper
+
+    def glyph_tile(r):
+        rgba = cv2.imread(str(WORK / "glyphs" / f"{r['id']}.png"), cv2.IMREAD_UNCHANGED)
+        h, w = rgba.shape[:2]
+        s = (size - 10) / max(h, w)
+        rgba = cv2.resize(rgba, (max(1, int(w * s)), max(1, int(h * s))))
+        t = np.full((size + pad, size, 3), 255, np.uint8)
+        t[:size] = paper
+        y0, x0 = (size - rgba.shape[0]) // 2, (size - rgba.shape[1]) // 2
+        a = rgba[:, :, 3:4].astype(np.float32) / 255
+        region = t[y0 : y0 + rgba.shape[0], x0 : x0 + rgba.shape[1]]
+        region[:] = (region * (1 - a) + rgba[:, :, :3] * a).astype(np.uint8)
+        if r["id"] in emitted:
+            cv2.rectangle(t, (0, 0), (size - 1, size - 1), (60, 160, 60), 2)
+        if r.get("pin"):
+            cv2.rectangle(t, (3, 3), (size - 4, size - 4), (200, 120, 30), 2)
+        cv2.putText(t, r["id"], (14, size + 15), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1)
+        return t
+
+    cols, blocks = 14, []
+    blank = np.full((size + pad, size, 3), 255, np.uint8)
+    for role in ROLES:
+        for d in range(1, 10):
+            cls = [r for r in rows if r["role"] == role and r["label"] == str(d)]
+            if not cls:
+                continue
+            header = np.full((26, cols * size), 255, np.uint8)
+            header = cv2.cvtColor(header, cv2.COLOR_GRAY2BGR)
+            cv2.putText(header, f"{role} {d}  ({len(cls)})", (4, 19),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1)
+            blocks.append(header)
+            tiles = [glyph_tile(r) for r in cls]
+            while len(tiles) % cols:
+                tiles.append(blank.copy())
+            for i in range(0, len(tiles), cols):
+                blocks.append(np.hstack(tiles[i : i + cols]))
+    out = WORK / "pack_review.png"
+    cv2.imwrite(str(out), np.vstack(blocks))
+    print(f"wrote {out}  (green = in the pack, blue = pinned)")
+    subprocess.run(["open", str(out)], check=False)
+
+
 if __name__ == "__main__":
     stage = sys.argv[1] if len(sys.argv) > 1 else ""
     if stage == "extract":
@@ -290,5 +374,9 @@ if __name__ == "__main__":
         stage_train_predict()
     elif stage == "emit":
         stage_emit()
+    elif stage == "review":
+        stage_review()
+    elif stage == "pin":
+        stage_pin(sys.argv[2:])
     else:
         sys.exit(__doc__)
