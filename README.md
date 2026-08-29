@@ -85,7 +85,7 @@ node test_wasm.mjs
 - [x] Browser frontend: Rust (Leptos → wasm), asset-pack driven, placeholder pack first
 - [ ] Button-bar UX polish in the browser frontend
 - [x] Phantom mode core: stall clock (difficulty-scaled), flips via `phantom_of`, 3 lives
-- [ ] Phantom grace window (correct placement wards off the flip)
+- [x] Phantom grace window (correct placement wards off the flip)
 - [ ] Phantom overlay: incoming givens fade in, flip becomes a crossfade
 - [ ] `atelier/`: photos of the handwritten grids → the final asset pack
 - [ ] Renderer finale — the handwritten digits become the game's font
