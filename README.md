@@ -19,6 +19,20 @@ python3 tui.py [easy|medium|hard] [seed]   # vim-style grid: hjkl move, 1-9 put,
 python3 cli.py [easy|medium|hard] [seed]   # line-mode REPL
 ```
 
+### Browser (Rust · Leptos → wasm)
+
+```
+source .emsdk/emsdk_env.sh
+emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
+cmake --build engine/build/wasm -j
+cd web && trunk serve --open
+```
+
+Same keys as the TUI (hjkl/arrows, 1-9, m pencil, x clear, u/r undo/redo,
+H hint, c check, n new) plus mouse. Digits render from the asset pack in
+`web/assets/` — the placeholder pack today; `assets/grandpere/`, cut from the
+original handwritten grids, at the end.
+
 REPL commands: `put r c v` · `del r c` · `hint` · `check` · `solve` · `save` · `load` · `new` · `quit`
 
 ## Test
@@ -68,6 +82,7 @@ node test_wasm.mjs
 - [x] C++ engine (`engine/` — library + tests)
 - [x] pybind11 bindings; frontends run on the compiled engine (local build; packaging when the project is final)
 - [x] Engine in the browser: wasm build with the JSON command surface
-- [ ] Browser frontend: Rust (Leptos → wasm), asset-pack driven, placeholder pack first
+- [x] Browser frontend: Rust (Leptos → wasm), asset-pack driven, placeholder pack first
+- [ ] Button-bar UX polish in the browser frontend
 - [ ] `atelier/`: photos of the handwritten grids → the final asset pack
 - [ ] Renderer finale — the handwritten digits become the game's font
