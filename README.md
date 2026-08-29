@@ -90,4 +90,4 @@ node test_wasm.mjs
 - [x] Phantom overlay: incoming givens fade in, flip becomes a crossfade
 - [x] Game rules: hints/checks capped (3 each), none in phantom, deliberate phantom exit, `?dev` uncaps
 - [x] `atelier/`: photos of the handwritten grids → the `grandpere` asset pack (originals and pack stay out of git)
-- [x] Renderer finale — open the game with `?pack=grandpere` and it is written in his hand
+- [x] Renderer finale — open the game with `?pack=grandpere` and it is written in his hand, on his paper

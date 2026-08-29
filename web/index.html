@@ -26,8 +26,9 @@
     .cross-r { border-right: 2px solid var(--ink); }
     .cross-b { border-bottom: 2px solid var(--ink); }
     .cell img.value { width: 78%; height: 78%; }
-    .cell.selected { background: #e8dfc8; }
-    .cell.same { background: #efe6cf; }
+    /* translucent, so a pack's paper background shows through the board */
+    .cell.selected { background: rgba(190, 160, 70, 0.30); }
+    .cell.same { background: rgba(190, 160, 70, 0.16); }
     .marks { position: absolute; inset: 2px; display: flex; flex-wrap: wrap;
              align-content: flex-start; gap: 1px; }
     .cell img.ghost { position: absolute; width: 78%; height: 78%; left: 11%; top: 11%;
