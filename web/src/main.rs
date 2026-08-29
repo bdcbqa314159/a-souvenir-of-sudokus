@@ -174,7 +174,20 @@ fn App() -> impl IntoView {
         match gloo_net::http::Request::get(&format!("{}/manifest.json", pack())).send().await {
             Ok(rsp) => match rsp.json::<Value>().await {
                 Ok(m) => match serde_json::from_value::<Manifest>(m["digits"].clone()) {
-                    Ok(parsed) => manifest.set(Some(parsed)),
+                    Ok(parsed) => {
+                        // a pack may bring its own paper — the page becomes his notebook
+                        if let Some(paper) = m["paper"].as_str() {
+                            if let Some(body) = document().body() {
+                                let style = body.style();
+                                let _ = style.set_property(
+                                    "background-image",
+                                    &format!("url('{}/{}')", pack(), paper),
+                                );
+                                let _ = style.set_property("background-size", "540px");
+                            }
+                        }
+                        manifest.set(Some(parsed));
+                    }
                     Err(e) => msg.set(format!("bad manifest shape: {e}")),
                 },
                 Err(e) => msg.set(format!("bad manifest: {e}")),
