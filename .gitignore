@@ -38,3 +38,5 @@ originals/
 
 # derived family-handwriting assets — publish only by explicit decision
 web/assets/grandpere/
+web/src-tauri/target/
+web/src-tauri/gen/

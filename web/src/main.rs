@@ -20,23 +20,31 @@ extern "C" {
     fn souvenir_cmd(request: &str) -> Result<String, JsValue>;
 }
 
-/// Asset pack, switchable per URL: ?pack=grandpere (default: the placeholder).
-/// The pack IS the finale — same game, his handwriting.
-fn pack() -> &'static str {
+/// Asset pack resolution. ?pack=<name> in the URL always wins; otherwise the
+/// loader probes grandpere first (so the packaged desktop app opens straight
+/// into his handwriting) and falls back to the placeholder. The loader sets
+/// the store before the first render reads it.
+fn pack_store() -> &'static std::sync::OnceLock<String> {
     static PACK: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    PACK.get_or_init(|| {
-        let search = window().location().search().unwrap_or_default();
-        for kv in search.trim_start_matches('?').split('&') {
-            if let Some(name) = kv.strip_prefix("pack=") {
-                if !name.is_empty()
-                    && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                {
-                    return format!("assets/{name}");
-                }
+    &PACK
+}
+
+fn pack() -> &'static str {
+    pack_store().get().map(String::as_str).unwrap_or("assets/placeholder")
+}
+
+fn url_pack() -> Option<String> {
+    let search = window().location().search().unwrap_or_default();
+    for kv in search.trim_start_matches('?').split('&') {
+        if let Some(name) = kv.strip_prefix("pack=") {
+            if !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                return Some(format!("assets/{name}"));
             }
         }
-        "assets/placeholder".into()
-    })
+    }
+    None
 }
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const LIVES: u32 = 3;
@@ -171,28 +179,38 @@ fn App() -> impl IntoView {
             }
             gloo_timers::future::TimeoutFuture::new(50).await;
         }
-        match gloo_net::http::Request::get(&format!("{}/manifest.json", pack())).send().await {
-            Ok(rsp) => match rsp.json::<Value>().await {
-                Ok(m) => match serde_json::from_value::<Manifest>(m["digits"].clone()) {
-                    Ok(parsed) => {
-                        // a pack may bring its own paper — the page becomes his notebook
-                        if let Some(paper) = m["paper"].as_str() {
-                            if let Some(body) = document().body() {
-                                let style = body.style();
-                                let _ = style.set_property(
-                                    "background-image",
-                                    &format!("url('{}/{}')", pack(), paper),
-                                );
-                                let _ = style.set_property("background-size", "540px");
-                            }
-                        }
-                        manifest.set(Some(parsed));
-                    }
-                    Err(e) => msg.set(format!("bad manifest shape: {e}")),
-                },
-                Err(e) => msg.set(format!("bad manifest: {e}")),
-            },
-            Err(e) => msg.set(format!("manifest fetch failed: {e}")),
+        let candidates = match url_pack() {
+            Some(p) => vec![p],
+            None => vec!["assets/grandpere".into(), "assets/placeholder".into()],
+        };
+        let mut loaded = false;
+        for cand in candidates {
+            let Ok(rsp) = gloo_net::http::Request::get(&format!("{cand}/manifest.json")).send().await
+            else {
+                continue;
+            };
+            let Ok(m) = rsp.json::<Value>().await else { continue };
+            let Ok(parsed) = serde_json::from_value::<Manifest>(m["digits"].clone()) else {
+                continue;
+            };
+            let _ = pack_store().set(cand);
+            // a pack may bring its own paper — the page becomes his notebook
+            if let Some(paper) = m["paper"].as_str() {
+                if let Some(body) = document().body() {
+                    let style = body.style();
+                    let _ = style.set_property(
+                        "background-image",
+                        &format!("url('{}/{}')", pack(), paper),
+                    );
+                    let _ = style.set_property("background-size", "540px");
+                }
+            }
+            manifest.set(Some(parsed));
+            loaded = true;
+            break;
+        }
+        if !loaded {
+            msg.set("no asset pack could be loaded".into());
         }
         let rsp = cmd(json!({"cmd": "new", "difficulty": "medium"}));
         if rsp["ok"].as_bool() == Some(true) {
