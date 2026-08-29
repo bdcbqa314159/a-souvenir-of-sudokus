@@ -23,6 +23,8 @@ extern "C" {
 const PACK: &str = "assets/placeholder";
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const LIVES: u32 = 3;
+const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if free
+const CHECKS: u32 = 3;
 const DIGIT_KEYS: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 #[derive(Clone, Copy, PartialEq)]
@@ -93,6 +95,11 @@ fn App() -> impl IntoView {
     let now = RwSignal::new(js_sys::Date::now());
     let phantom_over = RwSignal::new(false);
     let haunt_start: RwSignal<Option<f64>> = RwSignal::new(None);
+    let hints_left = RwSignal::new(HINTS);
+    let checks_left = RwSignal::new(CHECKS);
+    let leave_arm: RwSignal<Option<f64>> = RwSignal::new(None); // phantom exit confirm
+    // dev mode (?dev in the URL): assists uncapped — the debugging use survives
+    let dev = window().location().search().unwrap_or_default().contains("dev");
     let incoming: RwSignal<Option<Value>> = RwSignal::new(None); // the puzzle haunting this one
     let flip_anim = RwSignal::new(false);
 
@@ -215,6 +222,8 @@ fn App() -> impl IntoView {
             phantom_over.set(false);
             haunt_start.set(None);
             incoming.set(None);
+            hints_left.set(HINTS);
+            checks_left.set(CHECKS);
             last_progress.set(js_sys::Date::now());
             msg.set(format!("new {difficulty} game"));
         }
@@ -269,8 +278,32 @@ fn App() -> impl IntoView {
             }
             "u" => undo(),
             "r" => redo(),
-            "H" => play(json!({"cmd": "hint"})),
+            "H" => {
+                if !dev {
+                    if mode.get_untracked() == Mode::Phantom {
+                        msg.set("no hints in phantom mode — you are on your own".into());
+                        return;
+                    }
+                    if hints_left.get_untracked() == 0 {
+                        msg.set("no hints left".into());
+                        return;
+                    }
+                    hints_left.update(|h| *h -= 1);
+                }
+                play(json!({"cmd": "hint"}));
+            }
             "c" => {
+                if !dev {
+                    if mode.get_untracked() == Mode::Phantom {
+                        msg.set("no checking in phantom mode — trust your hand".into());
+                        return;
+                    }
+                    if checks_left.get_untracked() == 0 {
+                        msg.set("no checks left".into());
+                        return;
+                    }
+                    checks_left.update(|c| *c -= 1);
+                }
                 if let Some(g) = game.get_untracked() {
                     let mut req = json!({"cmd": "check"});
                     req["game"] = g;
@@ -399,6 +432,9 @@ fn App() -> impl IntoView {
                 let diff = g["difficulty"].as_str().unwrap_or("?").to_string();
                 let mut s =
                     format!("{diff} · {filled}/81 · {}", if pencil.get() { "pencil" } else { "pen" });
+                if dev {
+                    s.push_str(" · dev");
+                }
                 if mode.get() == Mode::Phantom {
                     let hearts = "♥".repeat(lives.get() as usize);
                     match haunt_start.get() {
@@ -456,18 +492,28 @@ fn App() -> impl IntoView {
         )
     };
 
+    // entering phantom is one click; leaving is deliberate — click twice within 3s
     let toggle_phantom = move |_| {
-        mode.update(|m| *m = if *m == Mode::Phantom { Mode::Classic } else { Mode::Phantom });
+        if mode.get_untracked() == Mode::Phantom {
+            let armed_recently =
+                leave_arm.get_untracked().is_some_and(|t| js_sys::Date::now() - t < 3_000.0);
+            if !armed_recently {
+                leave_arm.set(Some(js_sys::Date::now()));
+                msg.set("leave phantom mode? click phantom again to confirm".into());
+                return;
+            }
+            mode.set(Mode::Classic);
+            msg.set("back to classic".into());
+        } else {
+            mode.set(Mode::Phantom);
+            msg.set("phantom mode — keep placing right, or the sudoku flips".into());
+        }
+        leave_arm.set(None);
         lives.set(LIVES);
         phantom_over.set(false);
         haunt_start.set(None);
         incoming.set(None);
         last_progress.set(js_sys::Date::now());
-        msg.set(if mode.get_untracked() == Mode::Phantom {
-            "phantom mode — keep placing right, or the sudoku flips".into()
-        } else {
-            String::new()
-        });
     };
     let current_diff =
         move || game.get().and_then(|g| g["difficulty"].as_str().map(String::from)).unwrap_or_default();
@@ -481,8 +527,18 @@ fn App() -> impl IntoView {
         </div>
         <div class="bar">
             <button class:on=move || pencil.get() on:click=move |_| key_action("m")>"pencil"</button>
-            <button on:click=move |_| key_action("H")>"hint"</button>
-            <button on:click=move |_| key_action("c")>"check"</button>
+            <button
+                disabled=move || !dev && (mode.get() == Mode::Phantom || hints_left.get() == 0)
+                on:click=move |_| key_action("H")
+            >
+                {move || if dev { "hint".into() } else { format!("hint ({})", hints_left.get()) }}
+            </button>
+            <button
+                disabled=move || !dev && (mode.get() == Mode::Phantom || checks_left.get() == 0)
+                on:click=move |_| key_action("c")
+            >
+                {move || if dev { "check".into() } else { format!("check ({})", checks_left.get()) }}
+            </button>
             <button on:click=move |_| key_action("u")>"undo"</button>
             <button on:click=move |_| key_action("r")>"redo"</button>
         </div>
@@ -499,7 +555,12 @@ fn App() -> impl IntoView {
                             move || current_diff() == d
                         };
                         view! {
-                            <button class:on=is_current on:click=move |_| new_game(d.clone())>
+                            <button
+                                class:on=is_current
+                                disabled=move || mode.get() == Mode::Phantom
+                                title="leave phantom mode to change difficulty"
+                                on:click=move |_| new_game(d.clone())
+                            >
                                 {label}
                             </button>
                         }
