@@ -101,8 +101,9 @@ def count_solutions(board: list[int], limit: int = 2) -> int:
     return n
 
 
-# ponytail: difficulty = clue count; upgrade to technique-based grading when it matters
-CLUE_TARGET = {"easy": 40, "medium": 32, "hard": 26}
+# Dig targets, kept == the C++ engine's (which additionally grades by human
+# technique and regenerates until the grade matches — this spec engine doesn't).
+CLUE_TARGET = {"easy": 40, "medium": 26, "hard": 24}
 
 
 def generate(difficulty: str = "medium", seed: int | None = None) -> tuple[list[int], list[int]]:

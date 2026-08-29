@@ -109,6 +109,21 @@ std::string apply_command(const std::string &request) {
     }
     if (cmd == "phantom")
       return respond(phantom_of(game_of(req), seed_of(req))).dump();
+    if (cmd == "grade") {
+      if (!req.contains("puzzle") || !req["puzzle"].is_array() || req["puzzle"].size() != kCells)
+        throw std::invalid_argument("grade needs a puzzle of 81 cells");
+      Board p{};
+      for (int i = 0; i < kCells; ++i) {
+        const auto &v = req["puzzle"][static_cast<std::size_t>(i)];
+        if (!v.is_number_integer())
+          throw std::invalid_argument("bad puzzle cell");
+        const std::int64_t n = v.get<std::int64_t>();
+        if (n < 0 || n > 9)
+          throw std::invalid_argument("bad puzzle cell");
+        p[static_cast<std::size_t>(i)] = static_cast<int>(n);
+      }
+      return json{{"ok", true}, {"difficulty", to_string(grade(p))}}.dump();
+    }
 
     throw std::invalid_argument("unknown cmd: " + cmd);
   } catch (const std::exception &e) {

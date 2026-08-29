@@ -24,6 +24,9 @@ PYBIND11_MODULE(souvenir, m) {
   m.def("count_solutions", &souvenir::count_solutions, py::arg("board"), py::arg("limit") = 2);
   m.def("apply_command", &souvenir::apply_command, py::arg("request"));
   m.def(
+      "grade", [](const Board &puzzle) { return souvenir::to_string(souvenir::grade(puzzle)); },
+      py::arg("puzzle"));
+  m.def(
       "generate_with_clues",
       [](int clues, std::optional<std::uint64_t> seed) {
         auto g = souvenir::generate_with_clues(clues, seed);

@@ -89,6 +89,13 @@ def main() -> None:
     assert sum(1 for v in ph.puzzle if v) >= correct
     assert ph.board == ph.puzzle and ph.difficulty == "medium"
 
+    # GM grading: generated puzzles match their label; the api command agrees
+    for diff in ("easy", "medium", "hard"):
+        p, _ = souvenir.generate(diff, seed=11)
+        assert souvenir.grade(p) == diff
+        rsp = json.loads(souvenir.apply_command(json.dumps({"cmd": "grade", "puzzle": p})))
+        assert rsp["ok"] and rsp["difficulty"] == diff
+
     # JSON command surface
     rsp = json.loads(souvenir.apply_command(json.dumps({"cmd": "new", "difficulty": "easy", "seed": 42})))
     assert rsp["ok"] and not rsp["solved"]

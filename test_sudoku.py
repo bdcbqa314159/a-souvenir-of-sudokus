@@ -12,7 +12,7 @@ def main() -> None:
         assert sorted(full[i] for i in unit) == list(range(1, 10))
 
     # generation: unique solution, clue target respected, reproducible by seed
-    for diff, target in [("easy", 40), ("medium", 32), ("hard", 26)]:
+    for diff, target in [("easy", 40), ("medium", 26), ("hard", 24)]:
         puzzle, sol = generate(diff, seed=42)
         assert count_solutions(puzzle) == 1
         assert sum(1 for v in puzzle if v) >= target

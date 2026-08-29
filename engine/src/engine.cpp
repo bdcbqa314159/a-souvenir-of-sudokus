@@ -110,14 +110,17 @@ std::mt19937_64 make_rng(std::optional<std::uint64_t> seed) {
 
 const std::array<std::vector<int>, kCells> &peers() { return topology().peers; }
 
+// Dig targets tuned so the grader's target grade is likely per attempt
+// (measured: medium ~15% at 26 clues, hard ~40% at 24; at 32 clues medium
+// was a 2% needle and generate()'s retry cap became reachable).
 int clue_target(Difficulty difficulty) {
   switch (difficulty) {
   case Difficulty::kEasy:
     return 40;
   case Difficulty::kMedium:
-    return 32;
-  case Difficulty::kHard:
     return 26;
+  case Difficulty::kHard:
+    return 24;
   }
   throw std::invalid_argument("unknown difficulty");
 }
@@ -212,7 +215,14 @@ Generated generate_with_clues(int clue_target, std::optional<std::uint64_t> seed
 }
 
 Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed) {
-  return generate_with_clues(clue_target(difficulty), seed);
+  auto seeder = make_rng(seed);
+  Generated g{};
+  for (int attempt = 0; attempt < 200; ++attempt) {
+    g = generate_with_clues(clue_target(difficulty), seeder());
+    if (grade(g.puzzle) == difficulty)
+      return g;
+  }
+  return g; // ponytail: 200 grade misses — serve the last one rather than spin forever
 }
 
 Game phantom_of(const Game &game, std::optional<std::uint64_t> seed) {

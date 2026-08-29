@@ -80,6 +80,7 @@ node test_wasm.mjs
 - [x] Python engine draft (generator with guaranteed-unique solutions, solver, game state)
 - [x] CLI frontend (REPL + vim-style curses TUI)
 - [x] C++ engine (`engine/` — library + tests)
+- [x] Technique-based difficulty grading (the "GM pass": generate → grade → regenerate until the label is true)
 - [x] pybind11 bindings; frontends run on the compiled engine (local build; packaging when the project is final)
 - [x] Engine in the browser: wasm build with the JSON command surface
 - [x] Browser frontend: Rust (Leptos → wasm), asset-pack driven, placeholder pack first

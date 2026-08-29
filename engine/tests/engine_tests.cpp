@@ -37,7 +37,7 @@ TEST(Solve, InconsistentBoardRejected) {
 
 TEST(Generate, UniqueSolutionAndClueTargets) {
   const std::pair<Difficulty, int> cases[] = {
-      {Difficulty::kEasy, 40}, {Difficulty::kMedium, 32}, {Difficulty::kHard, 26}};
+      {Difficulty::kEasy, 40}, {Difficulty::kMedium, 26}, {Difficulty::kHard, 24}};
   for (auto [diff, target] : cases) {
     auto g = souvenir::generate(diff, 42);
     EXPECT_TRUE(valid_full_grid(g.solution));
@@ -71,6 +71,23 @@ TEST(Generate, ExplicitClueTarget) {
   EXPECT_EQ(full.puzzle, full.solution);
   EXPECT_THROW(souvenir::generate_with_clues(16, 9), std::invalid_argument);
   EXPECT_THROW(souvenir::generate_with_clues(82, 9), std::invalid_argument);
+}
+
+TEST(Grade, GeneratedPuzzlesMatchTheirLabel) {
+  for (auto d : {Difficulty::kEasy, Difficulty::kMedium, Difficulty::kHard})
+    for (std::uint64_t seed : {1ULL, 2ULL, 3ULL}) {
+      auto g = souvenir::generate(d, seed);
+      EXPECT_EQ(souvenir::grade(g.puzzle), d) << souvenir::to_string(d) << " seed " << seed;
+      EXPECT_EQ(souvenir::count_solutions(g.puzzle), 1);
+    }
+}
+
+TEST(Grade, Degenerates) {
+  auto full = souvenir::generate_with_clues(81, 1);
+  EXPECT_EQ(souvenir::grade(full.puzzle), Difficulty::kEasy); // nothing to do
+  Board bad{};
+  bad[0] = bad[1] = 5;
+  EXPECT_EQ(souvenir::grade(bad), Difficulty::kHard); // inconsistent -> hard
 }
 
 TEST(Phantom, PreservesCoverage) {
