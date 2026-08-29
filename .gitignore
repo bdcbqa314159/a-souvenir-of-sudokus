@@ -32,3 +32,9 @@ CLAUDE.local.md
 credentials
 *.secret
 .emsdk/
+
+# family photo originals — never in the public repo
+originals/
+
+# derived family-handwriting assets — publish only by explicit decision
+web/assets/grandpere/
