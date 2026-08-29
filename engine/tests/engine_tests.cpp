@@ -87,7 +87,10 @@ TEST(Grade, Degenerates) {
   EXPECT_EQ(souvenir::grade(full.puzzle), Difficulty::kEasy); // nothing to do
   Board bad{};
   bad[0] = bad[1] = 5;
-  EXPECT_EQ(souvenir::grade(bad), Difficulty::kHard); // inconsistent -> hard
+  EXPECT_EQ(souvenir::grade(bad), Difficulty::kHard); // sparse inconsistent -> hard
+  Board bad_full = full.puzzle;
+  bad_full[0] = bad_full[1]; // FULL inconsistent board must also grade hard
+  EXPECT_EQ(souvenir::grade(bad_full), Difficulty::kHard);
 }
 
 TEST(Phantom, PreservesCoverage) {
@@ -191,6 +194,8 @@ TEST(GameFlow, PutGivensMarksHint) {
   EXPECT_THROW(g.toggle_mark(given, 1), std::invalid_argument);
   EXPECT_THROW(g.is_given(-1), std::invalid_argument);
   EXPECT_THROW(g.is_given(81), std::invalid_argument);
+  EXPECT_THROW(g.marks(-1), std::invalid_argument);
+  EXPECT_THROW(g.marks(81), std::invalid_argument);
 
   g.toggle_mark(empty, 7);
   g.toggle_mark(empty, 3);
