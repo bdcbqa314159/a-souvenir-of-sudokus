@@ -12,7 +12,7 @@ if(EMSCRIPTEN)
   add_link_options(-fwasm-exceptions)
 endif()
 
-add_library(souvenir src/engine.cpp src/api.cpp)
+add_library(souvenir src/engine.cpp src/api.cpp src/grader.cpp)
 add_library(souvenir::souvenir ALIAS souvenir)
 # static lib links into the Python shared module — must be PIC on Linux/GCC
 set_target_properties(souvenir PROPERTIES POSITION_INDEPENDENT_CODE ON)

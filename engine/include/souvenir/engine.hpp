@@ -39,7 +39,13 @@ struct Generated {
   Board solution;
 };
 
-// Puzzle always has exactly one solution.
+// Human-technique grader ("GM pass"): rates how a person solves it, not the
+// backtracker. easy = singles suffice; medium = needs locked candidates or
+// naked pairs; hard = beyond that ladder. Inconsistent input grades hard.
+Difficulty grade(const Board &puzzle);
+
+// Puzzle always has exactly one solution, and grade(puzzle) == difficulty
+// (best effort: regenerates until the grade matches, capped at 200 attempts).
 Generated generate(Difficulty difficulty, std::optional<std::uint64_t> seed = std::nullopt);
 
 // Dig toward an explicit clue count (17..81, throws outside); the result may hold
