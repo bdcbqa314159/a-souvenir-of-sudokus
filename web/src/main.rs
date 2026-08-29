@@ -92,6 +92,8 @@ fn App() -> impl IntoView {
     let now = RwSignal::new(js_sys::Date::now());
     let phantom_over = RwSignal::new(false);
     let haunt_start: RwSignal<Option<f64>> = RwSignal::new(None);
+    let incoming: RwSignal<Option<Value>> = RwSignal::new(None); // the puzzle haunting this one
+    let flip_anim = RwSignal::new(false);
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -134,13 +136,20 @@ fn App() -> impl IntoView {
             let diff = g["difficulty"].as_str().unwrap_or("medium").to_string();
             match haunt_start.get_untracked() {
                 None => {
-                    // calm: has the stall clock run out? then the haunting begins
+                    // calm: has the stall clock run out? then the haunting begins —
+                    // and the incoming puzzle is decided NOW, so its ghost can show
                     if js_sys::Date::now() - last_progress.get_untracked() >= stall_ms(&diff) {
-                        haunt_start.set(Some(js_sys::Date::now()));
-                        msg.set(format!(
-                            "the phantom is coming — place a correct number within {}s to hold it off",
-                            (window_ms(&diff) / 1000.0) as u64
-                        ));
+                        let mut req = json!({"cmd": "phantom"});
+                        req["game"] = g;
+                        let rsp = cmd(req);
+                        if rsp["ok"].as_bool() == Some(true) {
+                            incoming.set(Some(rsp["game"].clone()));
+                            haunt_start.set(Some(js_sys::Date::now()));
+                            msg.set(format!(
+                                "the phantom is coming — place a correct number within {}s to hold it off",
+                                (window_ms(&diff) / 1000.0) as u64
+                            ));
+                        }
                     }
                     continue;
                 }
@@ -152,11 +161,14 @@ fn App() -> impl IntoView {
                     haunt_start.set(None); // window expired — the flip goes through
                 }
             }
-            let mut req = json!({"cmd": "phantom"});
-            req["game"] = g;
-            let rsp = cmd(req);
-            if rsp["ok"].as_bool() == Some(true) {
-                game.set(Some(rsp["game"].clone()));
+            if let Some(next) = incoming.get_untracked() {
+                game.set(Some(next));
+                incoming.set(None);
+                flip_anim.set(true);
+                spawn_local(async move {
+                    gloo_timers::future::TimeoutFuture::new(700).await;
+                    flip_anim.set(false);
+                });
                 history.set(History::default()); // no undoing your way out of a phantom
                 last_progress.set(js_sys::Date::now());
                 lives.update(|l| *l = l.saturating_sub(1));
@@ -201,6 +213,7 @@ fn App() -> impl IntoView {
             lives.set(LIVES);
             phantom_over.set(false);
             haunt_start.set(None);
+            incoming.set(None);
             last_progress.set(js_sys::Date::now());
             msg.set(format!("new {difficulty} game"));
         }
@@ -283,6 +296,7 @@ fn App() -> impl IntoView {
                             last_progress.set(js_sys::Date::now());
                             if haunt_start.get_untracked().is_some() {
                                 haunt_start.set(None);
+                                incoming.set(None);
                                 msg.set("the phantom recedes…".into());
                             }
                         }
@@ -320,6 +334,13 @@ fn App() -> impl IntoView {
             .unwrap_or_else(|| vec![vec![]; 81]);
         let sel = selected.get();
         let sel_value = board[sel];
+        // the ghost: while haunted, the incoming puzzle's givens materialize over
+        // the grid, solidifying as the grace window runs out
+        let ghost: Option<(Vec<i64>, f64)> = haunt_start.get().zip(incoming.get()).map(|(t0, inc)| {
+            let diff = g["difficulty"].as_str().unwrap_or("medium");
+            let progress = ((now.get() - t0) / window_ms(diff)).clamp(0.0, 1.0);
+            (board_of(&inc, "puzzle"), 0.08 + 0.45 * progress)
+        });
         (0..81usize)
             .map(|i| {
                 let v = board[i];
@@ -340,6 +361,15 @@ fn App() -> impl IntoView {
                     .then(|| digit_src(&man, role, v, i))
                     .flatten()
                     .map(|src| view! { <img class="value" src=src /> });
+                let ghost_img = ghost.as_ref().and_then(|(inc_puzzle, opacity)| {
+                    let gv = inc_puzzle[i];
+                    (gv != 0)
+                        .then(|| digit_src(&man, "given", gv, i))
+                        .flatten()
+                        .map(|src| {
+                            view! { <img class="ghost" src=src style=format!("opacity:{opacity:.2}") /> }
+                        })
+                });
                 let mark_imgs = (v == 0)
                     .then(|| {
                         marks[i]
@@ -352,6 +382,7 @@ fn App() -> impl IntoView {
                 view! {
                     <div class=class on:click=move |_| selected.set(i)>
                         {value_img}
+                        {ghost_img}
                         <div class="marks">{mark_imgs}</div>
                     </div>
                 }
@@ -397,7 +428,7 @@ fn App() -> impl IntoView {
 
     view! {
         <h1>"a-souvenir-of-sudokus"</h1>
-        <div class="grid">{cells}</div>
+        <div class="grid" class:flipping=move || flip_anim.get()>{cells}</div>
         <div class="bar">
             <button on:click=move |_| key_action("n")>"new"</button>
             {DIFFICULTIES
@@ -417,6 +448,7 @@ fn App() -> impl IntoView {
                     lives.set(LIVES);
                     phantom_over.set(false);
                     haunt_start.set(None);
+                    incoming.set(None);
                     last_progress.set(js_sys::Date::now());
                     msg.set(
                         if mode.get_untracked() == Mode::Phantom {
