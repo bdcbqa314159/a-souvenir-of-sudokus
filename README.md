@@ -22,6 +22,7 @@ python3 cli.py [easy|medium|hard] [seed]   # line-mode REPL
 ### Browser (Rust · Leptos → wasm)
 
 ```
+./scripts/scrub-paths.sh   # once per clone: strips personal paths from built binaries
 source .emsdk/emsdk_env.sh
 emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
 cmake --build engine/build/wasm -j
