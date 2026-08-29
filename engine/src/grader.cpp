@@ -12,8 +12,6 @@
 namespace souvenir {
 namespace {
 
-constexpr int kDigitMask = 0b1111111110;
-
 // 27 units: 9 rows, 9 cols, 9 boxes (grader-local; engine.cpp keeps its own)
 const std::array<std::array<int, 9>, 27> &units() {
   static const auto u = [] {
@@ -41,12 +39,8 @@ struct HumanSolver {
 
   explicit HumanSolver(const Board &puzzle) : b(puzzle) {
     for (int i = 0; i < kCells; ++i)
-      if (b[static_cast<std::size_t>(i)] == 0) {
-        int used = 0;
-        for (int p : peers()[static_cast<std::size_t>(i)])
-          used |= 1 << b[static_cast<std::size_t>(p)];
-        cand[static_cast<std::size_t>(i)] = ~used & kDigitMask;
-      }
+      if (b[static_cast<std::size_t>(i)] == 0)
+        cand[static_cast<std::size_t>(i)] = candidate_mask(b, i);
   }
 
   void place(int i, int v) {
@@ -176,6 +170,8 @@ struct HumanSolver {
 } // namespace
 
 Difficulty grade(const Board &puzzle) {
+  if (!consistent(puzzle))    // full inconsistent boards would otherwise fall
+    return Difficulty::kHard; // straight through the solved() loop as "easy"
   HumanSolver s(puzzle);
   bool needed_eliminations = false;
   while (!s.solved()) {

@@ -2,7 +2,9 @@
 
 The live backend is the C++ engine (engine/, compiled `souvenir` module) —
 the frontends import that. This file stays as the executable specification:
-same API, same JSON save-file contract (test_bindings.py cross-checks both).
+same JSON save-file contract (test_bindings.py cross-checks both); the
+in-memory API matches too, except randomness is passed as `rng` objects here
+vs integer `seed`s in the engine, and the engine additionally grades puzzles.
 
 Pure logic, no I/O. Board = list of 81 ints, 0 = empty, row-major.
 """

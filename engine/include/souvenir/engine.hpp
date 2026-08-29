@@ -20,6 +20,10 @@ using Board = std::array<int, kCells>; // 0 = empty
 // Peer cells (same row/column/box) of every cell.
 const std::array<std::vector<int>, kCells> &peers();
 
+// Bitmask of digits cell i may still take (bit d set = digit d allowed).
+// THE candidate rule — every consumer (solver, grader, api) derives from here.
+int candidate_mask(const Board &board, int i);
+
 // No digit repeated within any row/column/box.
 bool consistent(const Board &board);
 
@@ -74,6 +78,8 @@ public:
   void toggle_mark(int i, int v); // pencil mark, only on empty non-given cells
   void clear_marks(int i);        // erase every pencil mark in one cell
   std::uint16_t marks(int i) const {
+    if (i < 0 || i >= kCells)
+      throw std::invalid_argument("cell index out of range");
     return marks_[static_cast<std::size_t>(i)]; // bit d set = digit d marked
   }
 

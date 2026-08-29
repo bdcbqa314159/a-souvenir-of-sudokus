@@ -96,11 +96,9 @@ std::string apply_command(const std::string &request) {
       for (int i = 0; i < kCells; ++i) {
         json cell = json::array();
         if (g.board()[static_cast<std::size_t>(i)] == 0) {
-          unsigned used = 0;
-          for (int p : peers()[static_cast<std::size_t>(i)])
-            used |= 1u << g.board()[static_cast<std::size_t>(p)];
+          int m = candidate_mask(g.board(), i);
           for (int d = 1; d <= 9; ++d)
-            if (!((used >> d) & 1))
+            if ((m >> d) & 1)
               cell.push_back(d);
         }
         cands.push_back(std::move(cell));

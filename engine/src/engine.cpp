@@ -40,13 +40,6 @@ const Topology &topology() {
   return t;
 }
 
-int candidate_mask(const Board &b, int i) {
-  int used = 0;
-  for (int p : topology().peers[static_cast<std::size_t>(i)])
-    used |= 1 << b[static_cast<std::size_t>(p)];
-  return ~used & kDigitMask;
-}
-
 // Empty cell with fewest candidates; -1 if the board is full.
 int most_constrained(const Board &b, int &mask_out) {
   int best = -1, best_n = 10;
@@ -109,6 +102,15 @@ std::mt19937_64 make_rng(std::optional<std::uint64_t> seed) {
 } // namespace
 
 const std::array<std::vector<int>, kCells> &peers() { return topology().peers; }
+
+int candidate_mask(const Board &b, int i) {
+  // precondition: board values in 0..9 (shift below is UB otherwise); every
+  // in-tree caller passes a consistent()-checked or Game-validated board
+  int used = 0;
+  for (int p : topology().peers[static_cast<std::size_t>(i)])
+    used |= 1 << b[static_cast<std::size_t>(p)];
+  return ~used & kDigitMask;
+}
 
 // Dig targets tuned so the grader's target grade is likely per attempt
 // (measured: medium ~15% at 26 clues, hard ~40% at 24; at 32 clues medium

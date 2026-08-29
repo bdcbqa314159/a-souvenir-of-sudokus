@@ -14,6 +14,7 @@
 //   check       game                        -> game, wrong: [indices]
 //   candidates  game                        -> game, candidates: 81 digit lists
 //   phantom     game, seed?                 -> game (see phantom_of)
+//   grade       puzzle: [81 ints]           -> difficulty (no game/solved fields)
 // Response: {"ok": true, "game": {...}, "solved": bool, ...extras}
 //           {"ok": false, "error": "..."}   — never throws.
 #pragma once
