@@ -22,6 +22,22 @@ extern "C" {
 
 const PACK: &str = "assets/placeholder";
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
+const LIVES: u32 = 3;
+
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Classic,
+    Phantom,
+}
+
+/// Time without a correct placement before the sudoku phantoms, per difficulty.
+fn stall_ms(difficulty: &str) -> f64 {
+    match difficulty {
+        "easy" => 90_000.0,
+        "hard" => 45_000.0,
+        _ => 60_000.0,
+    }
+}
 
 type Manifest = HashMap<String, HashMap<String, Vec<String>>>; // role -> digit -> variants
 
@@ -61,6 +77,11 @@ fn App() -> impl IntoView {
     let pencil = RwSignal::new(false);
     let msg = RwSignal::new(String::new());
     let history = RwSignal::new(History::default());
+    let mode = RwSignal::new(Mode::Classic);
+    let lives = RwSignal::new(LIVES);
+    let last_progress = RwSignal::new(js_sys::Date::now());
+    let now = RwSignal::new(js_sys::Date::now());
+    let phantom_over = RwSignal::new(false);
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -85,6 +106,43 @@ fn App() -> impl IntoView {
             game.set(Some(rsp["game"].clone()));
         } else {
             msg.set(rsp["error"].as_str().unwrap_or("engine error").to_string());
+        }
+    });
+
+    // phantom clock: every 500ms refresh `now`; on stall expiry, the sudoku flips
+    spawn_local(async move {
+        loop {
+            gloo_timers::future::TimeoutFuture::new(500).await;
+            now.set(js_sys::Date::now());
+            if mode.get_untracked() != Mode::Phantom || phantom_over.get_untracked() {
+                continue;
+            }
+            let Some(g) = game.get_untracked() else { continue };
+            if board_of(&g, "board") == board_of(&g, "solution") {
+                continue; // solved — the phantoms lost
+            }
+            let diff = g["difficulty"].as_str().unwrap_or("medium").to_string();
+            if js_sys::Date::now() - last_progress.get_untracked() < stall_ms(&diff) {
+                continue;
+            }
+            let mut req = json!({"cmd": "phantom"});
+            req["game"] = g;
+            let rsp = cmd(req);
+            if rsp["ok"].as_bool() == Some(true) {
+                game.set(Some(rsp["game"].clone()));
+                history.set(History::default()); // no undoing your way out of a phantom
+                last_progress.set(js_sys::Date::now());
+                lives.update(|l| *l = l.saturating_sub(1));
+                if lives.get_untracked() == 0 {
+                    phantom_over.set(true);
+                    msg.set("the phantoms won — n for a new game".into());
+                } else {
+                    msg.set(format!(
+                        "the sudoku phantomed — {} live(s) left",
+                        lives.get_untracked()
+                    ));
+                }
+            }
         }
     });
 
@@ -113,6 +171,9 @@ fn App() -> impl IntoView {
         if rsp["ok"].as_bool() == Some(true) {
             game.set(Some(rsp["game"].clone()));
             history.set(History::default());
+            lives.set(LIVES);
+            phantom_over.set(false);
+            last_progress.set(js_sys::Date::now());
             msg.set(format!("new {difficulty} game"));
         }
     };
@@ -144,6 +205,9 @@ fn App() -> impl IntoView {
 
     let key_action = move |key: &str| {
         let i = selected.get_untracked();
+        if phantom_over.get_untracked() && key != "n" {
+            return; // only a new game raises the dead
+        }
         match key {
             "h" | "ArrowLeft" if i % 9 > 0 => selected.set(i - 1),
             "l" | "ArrowRight" if i % 9 < 8 => selected.set(i + 1),
@@ -184,6 +248,14 @@ fn App() -> impl IntoView {
                 let v: i64 = d.parse().unwrap();
                 let mark = pencil.get_untracked();
                 play(json!({"cmd": if mark { "mark" } else { "put" }, "i": i, "v": v}));
+                // only a number properly done counts as progress against the phantom
+                if !mark {
+                    if let Some(g) = game.get_untracked() {
+                        if board_of(&g, "board")[i] == v && board_of(&g, "solution")[i] == v {
+                            last_progress.set(js_sys::Date::now());
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -261,7 +333,18 @@ fn App() -> impl IntoView {
                 let board = board_of(&g, "board");
                 let filled = board.iter().filter(|v| **v != 0).count();
                 let diff = g["difficulty"].as_str().unwrap_or("?").to_string();
-                format!("{diff} · {filled}/81 · {}", if pencil.get() { "pencil" } else { "pen" })
+                let mut s =
+                    format!("{diff} · {filled}/81 · {}", if pencil.get() { "pencil" } else { "pen" });
+                if mode.get() == Mode::Phantom {
+                    let remain =
+                        ((stall_ms(&diff) - (now.get() - last_progress.get())) / 1000.0).max(0.0);
+                    s.push_str(&format!(
+                        " · {} · phantom in {}s",
+                        "♥".repeat(lives.get() as usize),
+                        remain as u64
+                    ));
+                }
+                s
             })
             .unwrap_or_else(|| "loading engine…".into())
     };
@@ -284,6 +367,26 @@ fn App() -> impl IntoView {
                     view! { <button on:click=move |_| new_game(d.clone())>{label}</button> }
                 })
                 .collect::<Vec<_>>()}
+            <button
+                class:on=move || mode.get() == Mode::Phantom
+                on:click=move |_| {
+                    mode.update(|m| {
+                        *m = if *m == Mode::Phantom { Mode::Classic } else { Mode::Phantom };
+                    });
+                    lives.set(LIVES);
+                    phantom_over.set(false);
+                    last_progress.set(js_sys::Date::now());
+                    msg.set(
+                        if mode.get_untracked() == Mode::Phantom {
+                            "phantom mode — keep placing right, or the sudoku flips".into()
+                        } else {
+                            String::new()
+                        },
+                    );
+                }
+            >
+                "phantom"
+            </button>
             <button class:on=move || pencil.get() on:click=move |_| key_action("m")>"pencil"</button>
             <button on:click=move |_| key_action("H")>"hint"</button>
             <button on:click=move |_| key_action("c")>"check"</button>
