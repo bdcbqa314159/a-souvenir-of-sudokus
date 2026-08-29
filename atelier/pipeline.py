@@ -44,11 +44,39 @@ def red_mask(bgr):
 
 
 def dark_mask(bgr):
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    return cv2.inRange(hsv, (0, 0, 0), (180, 70, 110))
+    """Black/grey pen, exposure-independent: adaptive threshold on luminance,
+    minus anything the red mask claims. Fixed HSV bounds missed the fainter
+    pages entirely (the old black-glyph yield was 175/14 pages; ~3x now)."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    ink = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35, 11
+    )
+    return ink & ~red_mask(bgr)
+
+
+def grid_score(mask):
+    """Does this warped quad look like a sudoku? Measured on the real photos:
+    grids have red fraction 0.07-0.16 and ~10 ink-profile peaks per direction;
+    skin (the knuckle that once won) is ~0.7 red and one solid band. Returns
+    -1 for a rejected quad, else the total band count (higher = more grid)."""
+    frac = np.count_nonzero(mask) / mask.size
+    if not 0.02 < frac < 0.30:
+        return -1
+    fat = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)))
+
+    def bands(axis):
+        prof = (fat > 0).sum(axis=axis).astype(np.float32)
+        prof = np.convolve(prof, np.ones(9) / 9, mode="same")
+        above = prof > prof.max() * 0.35
+        return int(np.count_nonzero(above[1:] & ~above[:-1]) + int(above[0]))
+
+    return bands(1) + bands(0)
 
 
 def rectify(photo: pathlib.Path):
+    """Warp the sudoku frame to SIDE². Candidate quads come from the largest red
+    contours; the winner is the one whose warp actually contains ruled lines —
+    skin is red in HSV, and one photo's knuckle used to beat the grid."""
     bgr = cv2.imread(str(photo))
     if bgr is None:
         raise SystemExit(f"unreadable: {photo}")
@@ -57,16 +85,24 @@ def rectify(photo: pathlib.Path):
     k = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=3)
     contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    best = max(contours, key=cv2.contourArea)
-    peri = cv2.arcLength(best, True)
-    approx = cv2.approxPolyDP(best, 0.02 * peri, True)
-    if len(approx) != 4:
-        approx = cv2.boxPoints(cv2.minAreaRect(best)).astype(np.int32).reshape(-1, 1, 2)
-    q = approx.reshape(4, 2).astype(np.float32)
-    s, d = q.sum(axis=1), np.diff(q, axis=1).ravel()
-    quad = np.float32([q[np.argmin(s)], q[np.argmin(d)], q[np.argmax(s)], q[np.argmax(d)]])
     target = np.float32([[0, 0], [SIDE, 0], [SIDE, SIDE], [0, SIDE]])
-    return cv2.warpPerspective(bgr, cv2.getPerspectiveTransform(quad, target), (SIDE, SIDE))
+    best_warp, best_score = None, -1
+    for cont in sorted(contours, key=cv2.contourArea, reverse=True)[:8]:
+        peri = cv2.arcLength(cont, True)
+        approx = cv2.approxPolyDP(cont, 0.02 * peri, True)
+        if len(approx) != 4:
+            approx = cv2.boxPoints(cv2.minAreaRect(cont)).astype(np.int32).reshape(-1, 1, 2)
+        q = approx.reshape(4, 2).astype(np.float32)
+        s, d = q.sum(axis=1), np.diff(q, axis=1).ravel()
+        quad = np.float32([q[np.argmin(s)], q[np.argmin(d)], q[np.argmax(s)], q[np.argmax(d)]])
+        warp = cv2.warpPerspective(bgr, cv2.getPerspectiveTransform(quad, target), (SIDE, SIDE))
+        score = grid_score(red_mask(warp))
+        if score > best_score:
+            best_warp, best_score = warp, score
+    if best_score < 10:
+        print(f"WARNING: no grid found in {photo.name} (best score {best_score}) — skipped")
+        return None
+    return best_warp
 
 
 def strip_lines(mask):
@@ -103,45 +139,90 @@ def is_big_digit(w, h, area):
 # --------------------------------------------------------------------- stages
 
 
+def glyph_rgba(warp, mask, x, y, w, h, ink):
+    """Crop with soft alpha: opacity follows the real ink strength, so pale
+    strokes render as pen pressure, not holes ('a bit too white')."""
+    crop_c = warp[y : y + h, x : x + w]
+    crop_m = mask[y : y + h, x : x + w]
+    if ink == "dark":
+        strength = 255 - cv2.cvtColor(crop_c, cv2.COLOR_BGR2GRAY)
+    else:
+        strength = cv2.cvtColor(crop_c, cv2.COLOR_BGR2HSV)[:, :, 1]
+    alpha = np.clip(strength.astype(np.float32) * 2.0, 0, 255).astype(np.uint8)
+    alpha[crop_m == 0] = 0
+    alpha = cv2.GaussianBlur(alpha, (3, 3), 0)
+    return np.dstack([crop_c, alpha])
+
+
+def iou(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ix = max(0, min(ax + aw, bx + bw) - max(ax, bx))
+    iy = max(0, min(ay + ah, by + bh) - max(ay, by))
+    inter = ix * iy
+    return inter / (aw * ah + bw * bh - inter) if inter else 0.0
+
+
 def stage_extract():
     WORK.mkdir(parents=True, exist_ok=True)
-    (WORK / "glyphs").mkdir(exist_ok=True)
     (WORK / "rectified").mkdir(exist_ok=True)
-    rows, gid = [], 0
+    # curation must survive re-extraction: carry labels and pins over by geometry
+    old_by = {}
+    if (WORK / "meta.csv").exists():
+        for r in load_meta():
+            old_by.setdefault((r["photo"], r["role"]), []).append(r)
+        (WORK / "meta.csv").rename(WORK / "meta.prev.csv")
+    glyphs_dir = WORK / "glyphs"
+    if glyphs_dir.exists():
+        for p in glyphs_dir.glob("*.png"):
+            p.unlink()
+    glyphs_dir.mkdir(exist_ok=True)
+
+    rows, gid, carried = [], 0, 0
     photos = sorted(p for p in ORIGINALS.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png"))
     for photo in photos:
         warp = rectify(photo)
+        if warp is None:
+            continue
         cv2.imwrite(str(WORK / "rectified" / f"{photo.stem}.png"), warp)
         for role, ink in ROLES.items():
             mask = strip_lines(red_mask(warp) if ink == "red" else dark_mask(warp))
             for m, x, y, w, h in components(mask):
                 if not is_big_digit(w, h, int(np.count_nonzero(m))):
                     continue
-                crop_m = m[y : y + h, x : x + w]
-                crop_c = warp[y : y + h, x : x + w]
-                rgba = np.dstack([crop_c, crop_m])
-                cv2.imwrite(str(WORK / "glyphs" / f"{gid:04d}.png"), rgba)
-                rows.append(
-                    {
-                        "id": f"{gid:04d}",
-                        "photo": photo.stem,
-                        "row": y // CELL,
-                        "col": x // CELL,
-                        "role": role,
-                        "x": x,
-                        "y": y,
-                        "w": w,
-                        "h": h,
-                        "label": "",
-                    }
+                cv2.imwrite(str(glyphs_dir / f"{gid:04d}.png"), glyph_rgba(warp, m, x, y, w, h, ink))
+                row = {
+                    "id": f"{gid:04d}",
+                    "photo": photo.stem,
+                    "row": y // CELL,
+                    "col": x // CELL,
+                    "role": role,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                    "label": "",
+                    "conf": "",
+                    "pin": "",
+                }
+                prev = old_by.get((photo.stem, role), [])
+                match = max(
+                    prev,
+                    key=lambda o: iou((x, y, w, h), (int(o["x"]), int(o["y"]), int(o["w"]), int(o["h"]))),
+                    default=None,
                 )
+                if match is not None and iou(
+                    (x, y, w, h), (int(match["x"]), int(match["y"]), int(match["w"]), int(match["h"]))
+                ) > 0.4:
+                    row["label"] = match["label"]
+                    row["pin"] = match.get("pin", "")
+                    if match["label"]:
+                        carried += 1
+                rows.append(row)
                 gid += 1
-    with open(WORK / "meta.csv", "w", newline="") as f:
-        wtr = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        wtr.writeheader()
-        wtr.writerows(rows)
+    save_meta(rows)
     by_role = {r: sum(1 for x in rows if x["role"] == r) for r in ROLES}
-    print(f"{len(rows)} glyphs from {len(photos)} photos  {by_role}")
+    print(f"{len(rows)} glyphs from {len(photos)} photos  {by_role}  (labels carried: {carried})")
 
 
 def load_meta():
