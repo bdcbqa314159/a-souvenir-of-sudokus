@@ -20,7 +20,24 @@ extern "C" {
     fn souvenir_cmd(request: &str) -> Result<String, JsValue>;
 }
 
-const PACK: &str = "assets/placeholder";
+/// Asset pack, switchable per URL: ?pack=grandpere (default: the placeholder).
+/// The pack IS the finale — same game, his handwriting.
+fn pack() -> &'static str {
+    static PACK: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    PACK.get_or_init(|| {
+        let search = window().location().search().unwrap_or_default();
+        for kv in search.trim_start_matches('?').split('&') {
+            if let Some(name) = kv.strip_prefix("pack=") {
+                if !name.is_empty()
+                    && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                {
+                    return format!("assets/{name}");
+                }
+            }
+        }
+        "assets/placeholder".into()
+    })
+}
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const LIVES: u32 = 3;
 const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if free
@@ -84,7 +101,7 @@ fn digit_src(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> Option
         return None; // a sparse pack must degrade, not divide by zero
     }
     let v = variants.get((cell * 31 + digit as usize) % variants.len())?;
-    Some(format!("{PACK}/{v}"))
+    Some(format!("{}/{v}", pack()))
 }
 
 #[derive(Clone, Default)]
@@ -154,7 +171,7 @@ fn App() -> impl IntoView {
             }
             gloo_timers::future::TimeoutFuture::new(50).await;
         }
-        match gloo_net::http::Request::get(&format!("{PACK}/manifest.json")).send().await {
+        match gloo_net::http::Request::get(&format!("{}/manifest.json", pack())).send().await {
             Ok(rsp) => match rsp.json::<Value>().await {
                 Ok(m) => match serde_json::from_value::<Manifest>(m["digits"].clone()) {
                     Ok(parsed) => manifest.set(Some(parsed)),
