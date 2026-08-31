@@ -245,7 +245,7 @@ def run(scr, g):
             elapsed = int(time.monotonic() - start)
             msg = (
                 f"solved in {elapsed // 60:02d}:{elapsed % 60:02d} with {mistakes} mistake(s) "
-                "— grand-père would be proud.  (n new game, q quit)"
+                "— el abuelo would be proud.  (n new game, q quit)"
             )
 
 

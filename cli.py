@@ -90,7 +90,7 @@ def main() -> None:
             continue
         show(g)
         if g.is_solved():
-            print("solved — grand-père would be proud.")
+            print("solved — el abuelo would be proud.")
             break
 
 
