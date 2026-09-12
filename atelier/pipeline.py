@@ -10,9 +10,11 @@ Stages (run in order; every output lands in originals/atelier-work/, gitignored)
   emit      normalized RGBA glyphs -> web/assets/grandpere/ + manifest.json
   review    open a curation matrix: every accepted glyph per class, indexed by
             id; emitted variants outlined green, pinned ones blue
-  paper     inpaint the ink off a rectified page -> pack paper.jpg (the game's
-            background becomes his actual notebook paper). Optional arg: photo
-            stem prefix to pick which page; default = first rectified.
+  paper     pack paper.jpg (the game's background becomes his actual notebook
+            paper). Optional arg: photo stem prefix. A rectified puzzle page
+            gets its ink inpainted away; a stem matching only a raw photo in
+            originals/ is taken as a blank quad-ruled page and center-cropped
+            as-is (sharpest result — photograph the empty notebook for this).
   pin       pipeline.py pin 0012 0034 ...  (unpin: pin -0012) — pinned glyphs
             always emit first
 
@@ -374,17 +376,42 @@ def stage_emit(max_variants=10):
 
 def stage_paper(stem=None):
     rect = sorted((WORK / "rectified").glob("*.png"))
-    src = next((p for p in rect if stem and p.stem.startswith(stem)), rect[0] if rect else None)
-    if src is None:
-        sys.exit("run extract first")
-    bgr = cv2.imread(str(src))
-    # ink away, paper stays: the faint quad ruling survives both masks, so the
-    # inpainted page keeps its graph-paper soul
-    mask = cv2.dilate(red_mask(bgr) | dark_mask(bgr), np.ones((7, 7), np.uint8))
-    clean = cv2.medianBlur(cv2.inpaint(bgr, mask, 5, cv2.INPAINT_TELEA), 3)
+    src = next((p for p in rect if stem and p.stem.startswith(stem)), None)
+    photo = None
+    if src is None and stem:
+        # no rectified match: a blank quad-ruled page photographed straight from
+        # the empty notebook — nothing to rectify, nothing to inpaint, so the
+        # texture survives untouched (the inpainted paper came out blurry)
+        photo = next(
+            (
+                p
+                for p in sorted(ORIGINALS.iterdir())
+                if p.stem.startswith(stem) and p.suffix.lower() in (".jpg", ".jpeg", ".png")
+            ),
+            None,
+        )
+    if src is None and photo is None:
+        src = rect[0] if rect else None
+        if src is None:
+            sys.exit("run extract first, or drop a blank-page photo in originals/")
+    if photo is not None:
+        bgr = cv2.imread(str(photo))
+        h, w = bgr.shape[:2]
+        s = min(h, w)
+        clean = bgr[(h - s) // 2 : (h + s) // 2, (w - s) // 2 : (w + s) // 2]
+        if s > 1600:
+            clean = cv2.resize(clean, (1600, 1600), interpolation=cv2.INTER_AREA)
+        name = photo.stem
+    else:
+        bgr = cv2.imread(str(src))
+        # ink away, paper stays: the faint quad ruling survives both masks, so the
+        # inpainted page keeps its graph-paper soul
+        mask = cv2.dilate(red_mask(bgr) | dark_mask(bgr), np.ones((7, 7), np.uint8))
+        clean = cv2.medianBlur(cv2.inpaint(bgr, mask, 5, cv2.INPAINT_TELEA), 3)
+        name = src.stem
     PACK.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(PACK / "paper.jpg"), clean, [cv2.IMWRITE_JPEG_QUALITY, 88])
-    print(f"paper from {src.stem} -> {PACK}/paper.jpg (re-run emit to update the manifest)")
+    cv2.imwrite(str(PACK / "paper.jpg"), clean, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    print(f"paper from {name} -> {PACK}/paper.jpg (re-run emit to update the manifest)")
 
 
 def stage_pin(args):
