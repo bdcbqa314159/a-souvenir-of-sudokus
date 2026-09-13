@@ -13,8 +13,11 @@ Stages (run in order; every output lands in originals/atelier-work/, gitignored)
   paper     pack paper.jpg (the game's background becomes his actual notebook
             paper). Optional arg: photo stem prefix. A rectified puzzle page
             gets its ink inpainted away; a stem matching only a raw photo in
-            originals/ is taken as a blank quad-ruled page and center-cropped
-            as-is (sharpest result — photograph the empty notebook for this).
+            originals/ is taken as a blank quad-ruled page and turned into a
+            seamless tile: lighting flattened, every ruling line remapped to
+            an exact grid, whole squares cropped, base toned to the UI cream,
+            ruling faded to PAPER_FADE (sharpest result — photograph the
+            empty notebook frame-filling and straight-on for this).
   pin       pipeline.py pin 0012 0034 ...  (unpin: pin -0012) — pinned glyphs
             always emit first
 
@@ -192,9 +195,22 @@ def stage_extract():
         cv2.imwrite(str(WORK / "rectified" / f"{photo.stem}.png"), warp)
         for role, ink in ROLES.items():
             mask = strip_lines(red_mask(warp) if ink == "red" else dark_mask(warp))
-            for m, x, y, w, h in components(mask):
-                if not is_big_digit(w, h, int(np.count_nonzero(m))):
+            comps = list(components(mask))
+            bigs = [c for c in comps if is_big_digit(c[3], c[4], int(np.count_nonzero(c[0])))]
+            # rescue detached top bars (his 5s): a small wide pen stroke hovering
+            # just above a digit belongs to it — extraction used to drop it as
+            # pencil-mark-sized, leaving bar-less fives
+            for m_s, x_s, y_s, w_s, h_s in comps:
+                if is_big_digit(w_s, h_s, int(np.count_nonzero(m_s))) or w_s <= h_s or w_s < 0.2 * CELL:
                     continue
+                for i, (m, x, y, w, h) in enumerate(bigs):
+                    gap = y - (y_s + h_s)
+                    if -0.1 * CELL < gap < 0.15 * CELL and x - 0.1 * CELL < x_s + w_s / 2 < x + w + 0.1 * CELL:
+                        m = m | m_s
+                        x0, y0 = min(x, x_s), min(y, y_s)
+                        bigs[i] = (m, x0, y0, max(x + w, x_s + w_s) - x0, max(y + h, y_s + h_s) - y0)
+                        break
+            for m, x, y, w, h in bigs:
                 cv2.imwrite(str(glyphs_dir / f"{gid:04d}.png"), glyph_rgba(warp, m, x, y, w, h, ink))
                 row = {
                     "id": f"{gid:04d}",
@@ -332,6 +348,38 @@ def stage_train_predict():
     print(f"labeled all; per digit: {counts}")
 
 
+INK_TARGET = {"given": (0x1A, 0x1A, 0x1A), "user": (0x1D, 0x27, 0xB5)}  # BGR --ink / --red
+INK_BLEND = {"given": 0.5, "user": 0.75}  # 0 = photo color, 1 = flat UI ink
+
+
+def harmonize_ink(rgba, role):
+    """Pull glyph color toward the UI ink so digits read consistently on the
+    pack paper (the raw photo reds ranged washed-pink to maroon), keeping the
+    per-pixel stroke variation as a brightness ripple so they stay handwritten."""
+    ink = np.float32(INK_TARGET[role])
+    rgb = rgba[:, :, :3].astype(np.float32)
+    gray = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
+    ripple = (gray[..., None] - gray.mean()) * 0.35
+    k = INK_BLEND[role]
+    out = np.clip(rgb * (1 - k) + (ink + ripple) * k, 0, 255)
+    # equal darkness for every glyph: gain each glyph's stroke luminance onto
+    # the target ink's, so no digit reads lighter than its neighbours
+    core = rgba[:, :, 3] > 128
+    if core.any():
+        lum = np.float32([0.114, 0.587, 0.299])
+        gain = float(np.dot(ink, lum) / max(out[core].mean(axis=0) @ lum, 1.0))
+        out = out * np.clip(gain, 0.6, 1.4)
+    rgba[:, :, :3] = np.clip(out, 0, 255).astype(np.uint8)
+    # same intensity for every glyph: faint pen pressure varied per photo, so
+    # scale each glyph's alpha until its stroke core hits a common strength
+    a = rgba[:, :, 3]
+    if (a > 0).any():
+        core = float(np.percentile(a[a > 0], 90))
+        if core > 0:
+            rgba[:, :, 3] = np.clip(a.astype(np.float32) * (235.0 / core), 0, 255).astype(np.uint8)
+    return rgba
+
+
 def stage_emit(max_variants=10):
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
     manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
@@ -353,6 +401,7 @@ def stage_emit(max_variants=10):
             paths = []
             for r in cand[:max_variants]:
                 rgba = cv2.imread(str(WORK / "glyphs" / f"{r['id']}.png"), cv2.IMREAD_UNCHANGED)
+                rgba = harmonize_ink(rgba, role)
                 h, w = rgba.shape[:2]
                 side = int(max(h, w) * 1.15)
                 sq = np.zeros((side, side, 4), np.uint8)
@@ -374,6 +423,85 @@ def stage_emit(max_variants=10):
     print(f"emitted {total} glyphs -> {PACK}/manifest.json")
 
 
+PAPER_FADE = 0.35  # ruling contrast: 0 = full ink, 1 = flat cream
+PAPER_CREAM = (0xE8, 0xF2, 0xF7)  # BGR of the web UI's --paper
+
+
+def blank_page_tile(bgr, out_w=1080):
+    """A blank quad-ruled page photo -> seamless background tile.
+
+    The web app tiles paper.jpg (background-size 540px), so the tile must
+    repeat invisibly. Three defects in a raw photo break that: the lighting
+    gradient, the perspective/lens skew of the ruling, and a crop that cuts
+    mid-square. So: flatten lighting, track every ruling line's (slightly
+    curved) path and remap each onto an exact grid, crop whole squares,
+    then tone the paper base to the UI cream and fade the ruling.
+    ponytail: peak-finding constants assume ~4300px close-up photos with
+    ~230px ruling; re-tune if the source photos change scale."""
+    from scipy.signal import find_peaks
+
+    h, w = bgr.shape[:2]
+    s = min(h, w)
+    crop = bgr[(h - s) // 2 : (h + s) // 2, (w - s) // 2 : (w + s) // 2].astype(np.float32)
+    base = cv2.GaussianBlur(crop, (0, 0), 80)
+    flat = np.clip(crop / base * base.mean(axis=(0, 1)), 0, 255)
+    g = cv2.cvtColor(flat.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    def peaks_of(prof):
+        prof = -np.convolve(prof, np.ones(9) / 9, mode="same")
+        p, _ = find_peaks(prof, distance=150, prominence=prof.std() * 0.5)
+        return p
+
+    def track(axis):
+        # fit each line's path across 10 strips: vertical lines as x(y), deg-2
+        # to capture the lens bow (a single homography left interior lines soft)
+        ref = peaks_of(g.mean(axis=axis))
+        size = s // 10
+        fits = []
+        for r in ref:
+            pts = []
+            for i in range(10):
+                strip = g[i * size : (i + 1) * size] if axis == 0 else g[:, i * size : (i + 1) * size]
+                pk = peaks_of(strip.mean(axis=axis))
+                if len(pk):
+                    near = pk[np.argmin(np.abs(pk - r))]
+                    if abs(near - r) < 60:
+                        pts.append((i * size + size / 2, near))
+            if len(pts) >= 4:
+                t, v = np.array(pts).T
+                fits.append(np.poly1d(np.polyfit(t, v, 2)))
+        return fits, ref
+
+    vfits, vref = track(0)
+    hfits, _ = track(1)
+    nv, nh = len(vfits), len(hfits)
+    if nv < 4 or nh < 4:
+        sys.exit(f"could not track the ruling ({nv}x{nh} lines) — is the page quad-ruled and frame-filling?")
+    per = float(np.median(np.diff(vref)))
+    dw, dh = int((nv - 1) * per), int((nh - 1) * per)
+    knots_x, knots_y = np.arange(nv) * per, np.arange(nh) * per
+    cx = np.array([f(s / 2) for f in vfits])
+    cy = np.array([f(s / 2) for f in hfits])
+    xs, ys = np.arange(dw, dtype=np.float32), np.arange(dh, dtype=np.float32)
+    x_in0, y_in0 = np.interp(xs, knots_x, cx), np.interp(ys, knots_y, cy)
+    map_x = np.empty((dh, dw), np.float32)
+    map_y = np.empty((dh, dw), np.float32)
+    for j in range(dh):
+        map_x[j] = np.interp(xs, knots_x, [f(y_in0[j]) for f in vfits])
+    h_mat = np.array([f(x_in0) for f in hfits])
+    for i in range(dw):
+        map_y[:, i] = np.interp(ys, knots_y, h_mat[:, i])
+    tile = cv2.remap(flat, map_x, map_y, cv2.INTER_CUBIC)
+
+    cream = np.float32(PAPER_CREAM)
+    tile = tile * (cream / np.median(tile.reshape(-1, 3), axis=0))
+    tile = np.clip(tile * (1 - PAPER_FADE) + cream * PAPER_FADE, 0, 255)
+    # the white-balance leaves the ruling minty; tilt line pixels back to blue
+    dark = np.clip((cream.sum() - tile.sum(axis=2)) / 60.0, 0, 1)[..., None]
+    tile = np.clip(tile * (1 + (np.float32([1.06, 1.0, 0.94]) - 1) * dark), 0, 255).astype(np.uint8)
+    return cv2.resize(tile, (out_w, round(out_w * dh / dw)), interpolation=cv2.INTER_AREA)
+
+
 def stage_paper(stem=None):
     rect = sorted((WORK / "rectified").glob("*.png"))
     src = next((p for p in rect if stem and p.stem.startswith(stem)), None)
@@ -382,12 +510,11 @@ def stage_paper(stem=None):
         # no rectified match: a blank quad-ruled page photographed straight from
         # the empty notebook — nothing to rectify, nothing to inpaint, so the
         # texture survives untouched (the inpainted paper came out blurry)
+        # blank pages live in originals/blank/ so extract never scans them
+        # (the wood table under a blank page can pass the red grid detector)
+        cand = sorted(ORIGINALS.glob("blank/*")) + sorted(ORIGINALS.iterdir())
         photo = next(
-            (
-                p
-                for p in sorted(ORIGINALS.iterdir())
-                if p.stem.startswith(stem) and p.suffix.lower() in (".jpg", ".jpeg", ".png")
-            ),
+            (p for p in cand if p.stem.startswith(stem) and p.suffix.lower() in (".jpg", ".jpeg", ".png")),
             None,
         )
     if src is None and photo is None:
@@ -395,12 +522,7 @@ def stage_paper(stem=None):
         if src is None:
             sys.exit("run extract first, or drop a blank-page photo in originals/")
     if photo is not None:
-        bgr = cv2.imread(str(photo))
-        h, w = bgr.shape[:2]
-        s = min(h, w)
-        clean = bgr[(h - s) // 2 : (h + s) // 2, (w - s) // 2 : (w + s) // 2]
-        if s > 1600:
-            clean = cv2.resize(clean, (1600, 1600), interpolation=cv2.INTER_AREA)
+        clean = blank_page_tile(cv2.imread(str(photo)))
         name = photo.stem
     else:
         bgr = cv2.imread(str(src))
