@@ -195,9 +195,22 @@ def stage_extract():
         cv2.imwrite(str(WORK / "rectified" / f"{photo.stem}.png"), warp)
         for role, ink in ROLES.items():
             mask = strip_lines(red_mask(warp) if ink == "red" else dark_mask(warp))
-            for m, x, y, w, h in components(mask):
-                if not is_big_digit(w, h, int(np.count_nonzero(m))):
+            comps = list(components(mask))
+            bigs = [c for c in comps if is_big_digit(c[3], c[4], int(np.count_nonzero(c[0])))]
+            # rescue detached top bars (his 5s): a small wide pen stroke hovering
+            # just above a digit belongs to it — extraction used to drop it as
+            # pencil-mark-sized, leaving bar-less fives
+            for m_s, x_s, y_s, w_s, h_s in comps:
+                if is_big_digit(w_s, h_s, int(np.count_nonzero(m_s))) or w_s <= h_s or w_s < 0.2 * CELL:
                     continue
+                for i, (m, x, y, w, h) in enumerate(bigs):
+                    gap = y - (y_s + h_s)
+                    if -0.1 * CELL < gap < 0.15 * CELL and x - 0.1 * CELL < x_s + w_s / 2 < x + w + 0.1 * CELL:
+                        m = m | m_s
+                        x0, y0 = min(x, x_s), min(y, y_s)
+                        bigs[i] = (m, x0, y0, max(x + w, x_s + w_s) - x0, max(y + h, y_s + h_s) - y0)
+                        break
+            for m, x, y, w, h in bigs:
                 cv2.imwrite(str(glyphs_dir / f"{gid:04d}.png"), glyph_rgba(warp, m, x, y, w, h, ink))
                 row = {
                     "id": f"{gid:04d}",
@@ -482,12 +495,11 @@ def stage_paper(stem=None):
         # no rectified match: a blank quad-ruled page photographed straight from
         # the empty notebook — nothing to rectify, nothing to inpaint, so the
         # texture survives untouched (the inpainted paper came out blurry)
+        # blank pages live in originals/blank/ so extract never scans them
+        # (the wood table under a blank page can pass the red grid detector)
+        cand = sorted(ORIGINALS.glob("blank/*")) + sorted(ORIGINALS.iterdir())
         photo = next(
-            (
-                p
-                for p in sorted(ORIGINALS.iterdir())
-                if p.stem.startswith(stem) and p.suffix.lower() in (".jpg", ".jpeg", ".png")
-            ),
+            (p for p in cand if p.stem.startswith(stem) and p.suffix.lower() in (".jpg", ".jpeg", ".png")),
             None,
         )
     if src is None and photo is None:
