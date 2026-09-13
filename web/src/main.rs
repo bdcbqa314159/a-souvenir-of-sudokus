@@ -646,6 +646,18 @@ fn App() -> impl IntoView {
                     hints_left.update(|h| *h -= 1);
                 }
             }
+            // dev only: fill the whole board via hints, to see the glyphs in action
+            "S" if dev => {
+                let empties = game
+                    .get_untracked()
+                    .map(|g| board_of(&g, "board").iter().filter(|v| **v == 0).count())
+                    .unwrap_or(0);
+                for _ in 0..empties {
+                    if !play(json!({"cmd": "hint"})) {
+                        break;
+                    }
+                }
+            }
             "c" => {
                 if !assist_allowed(checks_left, false) {
                     return;
@@ -922,6 +934,7 @@ fn App() -> impl IntoView {
             </button>
             <button on:click=move |_| key_action("u")>{move || t(lang.get()).undo}</button>
             <button on:click=move |_| key_action("r")>{move || t(lang.get()).redo}</button>
+            {dev.then(|| view! { <button on:click=move |_| key_action("S")>"solve"</button> })}
         </div>
         <div class="bar setup">
             <button on:click=move |_| key_action("n")>{move || t(lang.get()).new_game}</button>
