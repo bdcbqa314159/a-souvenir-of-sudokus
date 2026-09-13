@@ -335,6 +335,23 @@ def stage_train_predict():
     print(f"labeled all; per digit: {counts}")
 
 
+INK_TARGET = {"given": (0x1A, 0x1A, 0x1A), "user": (0x1D, 0x27, 0xB5)}  # BGR --ink / --red
+INK_BLEND = {"given": 0.5, "user": 0.75}  # 0 = photo color, 1 = flat UI ink
+
+
+def harmonize_ink(rgba, role):
+    """Pull glyph color toward the UI ink so digits read consistently on the
+    pack paper (the raw photo reds ranged washed-pink to maroon), keeping the
+    per-pixel stroke variation as a brightness ripple so they stay handwritten."""
+    ink = np.float32(INK_TARGET[role])
+    rgb = rgba[:, :, :3].astype(np.float32)
+    gray = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
+    ripple = (gray[..., None] - gray.mean()) * 0.35
+    k = INK_BLEND[role]
+    rgba[:, :, :3] = np.clip(rgb * (1 - k) + (ink + ripple) * k, 0, 255).astype(np.uint8)
+    return rgba
+
+
 def stage_emit(max_variants=10):
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
     manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
@@ -356,6 +373,7 @@ def stage_emit(max_variants=10):
             paths = []
             for r in cand[:max_variants]:
                 rgba = cv2.imread(str(WORK / "glyphs" / f"{r['id']}.png"), cv2.IMREAD_UNCHANGED)
+                rgba = harmonize_ink(rgba, role)
                 h, w = rgba.shape[:2]
                 side = int(max(h, w) * 1.15)
                 sq = np.zeros((side, side, 4), np.uint8)
