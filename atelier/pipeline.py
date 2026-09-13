@@ -383,6 +383,10 @@ def harmonize_ink(rgba, role):
 def stage_emit(max_variants=10):
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
     manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
+    # start clean: stale glyphs from earlier emits otherwise linger in the pack
+    # (and break the Tauri bundle when a cached build references a gone file)
+    for old in PACK.glob("digits/*/*.png"):
+        old.unlink()
     for role in ROLES:
         for d in range(1, 10):
             cand = [r for r in rows if r["role"] == role and r["label"] == str(d)]
