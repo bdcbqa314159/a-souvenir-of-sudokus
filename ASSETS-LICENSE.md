@@ -4,7 +4,7 @@ The handwritten digit glyphs and the notebook-paper background — everything
 under `web/assets/grandpere/` and baked into the released binaries — are
 digitisations of a family member's handwriting ("el abuelo").
 
-**Copyright © 2026 Bernardo Cohen. All rights reserved.**
+**Copyright © 2026 Bernardo Cohen — de la Patada software. All rights reserved.**
 
 These assets are part of a personal tribute. They are **not** licensed for
 reuse, redistribution outside the released binaries, or derivative works of

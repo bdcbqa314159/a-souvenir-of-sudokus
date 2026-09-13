@@ -433,7 +433,7 @@ def stage_emit(max_variants=10):
 PAPER_FADE = 0.35  # ruling contrast: 0 = full ink, 1 = flat cream
 PAPER_CREAM = (0xE8, 0xF2, 0xF7)  # BGR of the web UI's --paper
 STAMP = (
-    "(c) 2026 Bernardo Cohen - a-souvenir-of-sudokus. "
+    "(c) 2026 Bernardo Cohen - de la Patada software - a-souvenir-of-sudokus. "
     "Handwriting of el abuelo. All rights reserved; not licensed for reuse."
 )
 
