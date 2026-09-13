@@ -416,12 +416,13 @@ def stage_emit(max_variants=10):
                 rel = f"digits/{role}/{d}_{r['id']}.png"
                 dst = PACK / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(dst), out)
+                save_png(dst, out)
                 paths.append(rel)
             if paths:
                 manifest["digits"][role][str(d)] = paths
     if (PACK / "paper.jpg").exists():
         manifest["paper"] = "paper.jpg"
+    manifest["copyright"] = STAMP
     (PACK / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
     print(f"emitted {total} glyphs -> {PACK}/manifest.json")
@@ -429,6 +430,31 @@ def stage_emit(max_variants=10):
 
 PAPER_FADE = 0.35  # ruling contrast: 0 = full ink, 1 = flat cream
 PAPER_CREAM = (0xE8, 0xF2, 0xF7)  # BGR of the web UI's --paper
+STAMP = (
+    "(c) 2026 Bernardo Cohen - a-souvenir-of-sudokus. "
+    "Handwriting of el abuelo. All rights reserved; not licensed for reuse."
+)
+
+
+def save_png(path, bgra):
+    """Write a glyph with the IP stamp embedded (PNG tEXt chunks)."""
+    from PIL import Image, PngImagePlugin
+
+    info = PngImagePlugin.PngInfo()
+    info.add_text("Copyright", STAMP)
+    info.add_text("Author", "Bernardo Cohen")
+    Image.fromarray(cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)).save(str(path), pnginfo=info)
+
+
+def save_jpg(path, bgr, quality=92):
+    """Write the paper with the IP stamp embedded (EXIF Copyright/Artist)."""
+    from PIL import Image
+
+    img = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+    exif = Image.Exif()
+    exif[0x8298] = STAMP  # Copyright
+    exif[0x013B] = "Bernardo Cohen"  # Artist
+    img.save(str(path), quality=quality, exif=exif.tobytes())
 
 
 def blank_page_tile(bgr, out_w=1080):
@@ -536,7 +562,7 @@ def stage_paper(stem=None):
         clean = cv2.medianBlur(cv2.inpaint(bgr, mask, 5, cv2.INPAINT_TELEA), 3)
         name = src.stem
     PACK.mkdir(parents=True, exist_ok=True)
-    cv2.imwrite(str(PACK / "paper.jpg"), clean, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    save_jpg(PACK / "paper.jpg", clean)
     print(f"paper from {name} -> {PACK}/paper.jpg (re-run emit to update the manifest)")
 
 
