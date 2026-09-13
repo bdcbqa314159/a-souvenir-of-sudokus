@@ -361,7 +361,22 @@ def harmonize_ink(rgba, role):
     gray = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
     ripple = (gray[..., None] - gray.mean()) * 0.35
     k = INK_BLEND[role]
-    rgba[:, :, :3] = np.clip(rgb * (1 - k) + (ink + ripple) * k, 0, 255).astype(np.uint8)
+    out = np.clip(rgb * (1 - k) + (ink + ripple) * k, 0, 255)
+    # equal darkness for every glyph: gain each glyph's stroke luminance onto
+    # the target ink's, so no digit reads lighter than its neighbours
+    core = rgba[:, :, 3] > 128
+    if core.any():
+        lum = np.float32([0.114, 0.587, 0.299])
+        gain = float(np.dot(ink, lum) / max(out[core].mean(axis=0) @ lum, 1.0))
+        out = out * np.clip(gain, 0.6, 1.4)
+    rgba[:, :, :3] = np.clip(out, 0, 255).astype(np.uint8)
+    # same intensity for every glyph: faint pen pressure varied per photo, so
+    # scale each glyph's alpha until its stroke core hits a common strength
+    a = rgba[:, :, 3]
+    if (a > 0).any():
+        core = float(np.percentile(a[a > 0], 90))
+        if core > 0:
+            rgba[:, :, 3] = np.clip(a.astype(np.float32) * (235.0 / core), 0, 255).astype(np.uint8)
     return rgba
 
 
