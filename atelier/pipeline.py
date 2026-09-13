@@ -20,6 +20,8 @@ Stages (run in order; every output lands in originals/atelier-work/, gitignored)
             empty notebook frame-filling and straight-on for this).
   pin       pipeline.py pin 0012 0034 ...  (unpin: pin -0012) — pinned glyphs
             always emit first
+  verify    pipeline.py verify <asset.png> — check the invisible provenance
+            watermark (needs the secret wm.key from atelier-work)
 
 Labels live in meta.csv (column `label`, 1-9, empty = unlabeled; -1 = rejected).
 Apply labels with:  pipeline.py label <id>=<digit> <id>=<digit> ...
@@ -420,8 +422,8 @@ def stage_emit(max_variants=10):
                 paths.append(rel)
             if paths:
                 manifest["digits"][role][str(d)] = paths
-    if (PACK / "paper.jpg").exists():
-        manifest["paper"] = "paper.jpg"
+    if (PACK / "paper.png").exists():
+        manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
     (PACK / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
@@ -436,25 +438,65 @@ STAMP = (
 )
 
 
-def save_png(path, bgra):
-    """Write a glyph with the IP stamp embedded (PNG tEXt chunks)."""
+def wm_key():
+    """Secret watermark key — lives in gitignored atelier-work, never in git.
+    Losing it means old marks can't be verified: back it up with the photos."""
+    kp = WORK / "wm.key"
+    if not kp.exists():
+        import secrets
+
+        kp.parent.mkdir(parents=True, exist_ok=True)
+        kp.write_bytes(secrets.token_bytes(32))
+    return kp.read_bytes()
+
+
+def watermark(img):
+    """Proof-grade provenance mark, invisible: all pixel LSBs are zeroed, then
+    the first LSBs carry [len | STAMP | HMAC(secret key, zeroed pixels)]. On a
+    bit-identical rip, only the key holder can demonstrate authorship and no
+    one can forge the mark (`pipeline.py verify <file>`).
+    ponytail: survives file copies (the realistic rip), not re-encode/resize —
+    DCT spread-spectrum watermarking if that ever matters."""
+    import hashlib
+    import hmac
+
+    flat = img.reshape(-1).copy()
+    flat &= 0xFE
+    mac = hmac.new(wm_key(), flat.tobytes(), hashlib.sha256).digest()[:16]
+    msg = STAMP.encode() + mac
+    bits = np.unpackbits(np.frombuffer(len(msg).to_bytes(2, "big") + msg, np.uint8))
+    if bits.size > flat.size:
+        sys.exit("image too small to watermark")
+    flat[: bits.size] |= bits
+    return flat.reshape(img.shape)
+
+
+def stage_verify(path):
+    import hashlib
+    import hmac
+
+    from PIL import Image
+
+    flat = np.array(Image.open(path)).reshape(-1)
+    n = int.from_bytes(np.packbits(flat[:16] & 1).tobytes(), "big")
+    msg = np.packbits(flat[16 : 16 + n * 8] & 1).tobytes()
+    stamp, mac = msg[:-16], msg[-16:]
+    want = hmac.new(wm_key(), (flat & 0xFE).tobytes(), hashlib.sha256).digest()[:16]
+    if hmac.compare_digest(want, mac):
+        print(f"VERIFIED (key holder's mark, pixels untampered): {stamp.decode(errors='replace')}")
+    else:
+        sys.exit(f"NOT VERIFIED — no valid mark for this key. Raw payload: {stamp[:90]!r}")
+
+
+def save_png(path, img):
+    """Write an asset: invisible watermark in the pixels + IP stamp in tEXt."""
     from PIL import Image, PngImagePlugin
 
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA if img.shape[2] == 4 else cv2.COLOR_BGR2RGB)
     info = PngImagePlugin.PngInfo()
     info.add_text("Copyright", STAMP)
     info.add_text("Author", "Bernardo Cohen")
-    Image.fromarray(cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)).save(str(path), pnginfo=info)
-
-
-def save_jpg(path, bgr, quality=92):
-    """Write the paper with the IP stamp embedded (EXIF Copyright/Artist)."""
-    from PIL import Image
-
-    img = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
-    exif = Image.Exif()
-    exif[0x8298] = STAMP  # Copyright
-    exif[0x013B] = "Bernardo Cohen"  # Artist
-    img.save(str(path), quality=quality, exif=exif.tobytes())
+    Image.fromarray(watermark(rgb)).save(str(path), pnginfo=info)
 
 
 def blank_page_tile(bgr, out_w=1080):
@@ -562,8 +604,10 @@ def stage_paper(stem=None):
         clean = cv2.medianBlur(cv2.inpaint(bgr, mask, 5, cv2.INPAINT_TELEA), 3)
         name = src.stem
     PACK.mkdir(parents=True, exist_ok=True)
-    save_jpg(PACK / "paper.jpg", clean)
-    print(f"paper from {name} -> {PACK}/paper.jpg (re-run emit to update the manifest)")
+    # PNG, not JPEG: the watermark lives in pixel LSBs and needs lossless
+    save_png(PACK / "paper.png", clean)
+    (PACK / "paper.jpg").unlink(missing_ok=True)
+    print(f"paper from {name} -> {PACK}/paper.png (re-run emit to update the manifest)")
 
 
 def stage_pin(args):
@@ -658,6 +702,8 @@ if __name__ == "__main__":
         stage_review()
     elif stage == "pin":
         stage_pin(sys.argv[2:])
+    elif stage == "verify":
+        stage_verify(sys.argv[2])
     elif stage == "paper":
         stage_paper(sys.argv[2] if len(sys.argv) > 2 else None)
     else:
