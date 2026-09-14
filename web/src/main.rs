@@ -423,7 +423,10 @@ fn App() -> impl IntoView {
         };
         let mut loaded = false;
         for cand in candidates {
-            let Ok(rsp) = gloo_net::http::Request::get(&format!("{cand}/manifest.json")).send().await
+            // cache-buster: a stale cached manifest points at pack files that
+            // no longer exist after a re-emit ("broken images, wrong background")
+            let url = format!("{cand}/manifest.json?t={}", js_sys::Date::now() as u64);
+            let Ok(rsp) = gloo_net::http::Request::get(&url).send().await
             else {
                 continue;
             };
