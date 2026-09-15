@@ -37,10 +37,16 @@ touch web/src-tauri/src/lib.rs
 if [ "$(uname -s)" = Darwin ]; then
   # dmg bundling needs an interactive terminal; the shipped artifact is the
   # zipped .app anyway (BUILDING.md)
-  (cd web && cargo tauri build --bundles app)
+  BUNDLE_ARGS="--bundles app"
 else
-  (cd web && cargo tauri build)
+  BUNDLE_ARGS=""
 fi
+# tauri's asset scan flakes on the first build after pack files changed;
+# one retry with a forced macro re-eval reliably clears it
+(cd web && cargo tauri build $BUNDLE_ARGS) || {
+  touch web/src-tauri/src/lib.rs
+  (cd web && cargo tauri build $BUNDLE_ARGS)
+}
 
 echo
 echo "== bundles =="

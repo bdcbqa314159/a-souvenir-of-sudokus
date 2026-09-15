@@ -576,12 +576,11 @@ def blank_page_tile(bgr, out_w=1080):
 
 def stage_paper(stem=None):
     rect = sorted((WORK / "rectified").glob("*.png"))
-    src = next((p for p in rect if stem and p.stem.startswith(stem)), None)
     photo = None
-    if src is None and stem:
-        # no rectified match: a blank quad-ruled page photographed straight from
-        # the empty notebook — nothing to rectify, nothing to inpaint, so the
-        # texture survives untouched (the inpainted paper came out blurry)
+    if stem:
+        # a blank-page photo wins over any rectified file of the same stem:
+        # a stale bogus warp in rectified/ once shadowed IMG_7807 and shipped
+        # inpainted wood-table blur as the pack paper
         # blank pages live in originals/blank/ so extract never scans them
         # (the wood table under a blank page can pass the red grid detector)
         cand = sorted(ORIGINALS.glob("blank/*")) + sorted(ORIGINALS.iterdir())
@@ -589,6 +588,9 @@ def stage_paper(stem=None):
             (p for p in cand if p.stem.startswith(stem) and p.suffix.lower() in (".jpg", ".jpeg", ".png")),
             None,
         )
+    src = None
+    if photo is None:
+        src = next((p for p in rect if stem and p.stem.startswith(stem)), None)
     if src is None and photo is None:
         src = rect[0] if rect else None
         if src is None:
