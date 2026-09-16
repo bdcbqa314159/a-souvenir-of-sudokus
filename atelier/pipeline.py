@@ -525,23 +525,27 @@ def stage_synth(per_class=10, seed=7):
             if len(pool) < 2:
                 continue
             sdfs = [sdf(m) for m in pool]
-            # morph only between lookalikes: a random partner can be a
-            # differently-shaped exemplar and the midpoint is a mongrel
+            # blend 3-4 exemplars, not a near-copy pair: measured on the pack,
+            # pair-morphs sat at 0.79 IoU to their nearest scan while his own
+            # digits sit at 0.60 to each other — multi-blends land at his
+            # natural variation, so no output is close to any single scan.
+            # anchored around the 3 most-alike exemplars so the blend stays a
+            # coherent digit, not a mongrel of divergent shapes
             bin_pool = [(m > 64) for m in pool]
 
             def iou_m(a, b):
                 return (a & b).sum() / max(1, (a | b).sum())
 
-            partners = [
-                max((j for j in range(len(pool)) if j != i), key=lambda j: iou_m(bin_pool[i], bin_pool[j]))
-                for i in range(len(pool))
-            ]
             paths = []
             for k in range(per_class):
                 i = int(rng.integers(len(pool)))
-                j = partners[i]
-                t = rng.uniform(0.25, 0.5)  # stay nearer the anchor exemplar
-                s = (1 - t) * sdfs[i] + t * sdfs[j]
+                near = sorted((j for j in range(len(pool)) if j != i), key=lambda j: -iou_m(bin_pool[i], bin_pool[j]))
+                circle = near[: min(6, len(near))]
+                picks = [i] + list(rng.choice(circle, min(3, len(circle)), replace=False))
+                # concentrated dirichlet: flat draws land near corners and one
+                # exemplar dominates — that's a near-copy again
+                w = rng.dirichlet(np.ones(len(picks)) * 4.0)
+                s = sum(wi * sdfs[p] for wi, p in zip(w, picks))
                 gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
                 s = cv2.remap(
                     s, gx + elastic((S, S), 3.0, 10), gy + elastic((S, S), 3.0, 10), cv2.INTER_LINEAR
