@@ -475,6 +475,108 @@ def watermark(img):
     return flat.reshape(img.shape)
 
 
+def stage_synth(per_class=10, seed=7):
+    """Synthetic 'font' pack: each glyph is a morph between two of his real
+    digits (SDF interpolation) plus a small elastic warp and stroke-width
+    jitter — his style survives, but no emitted glyph is any actual scan.
+    Emits web/assets/souvenir/ with the same stamp + watermark as grandpere."""
+    rng = np.random.default_rng(seed)
+    rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
+    out_pack = ROOT / "web" / "assets" / "souvenir"
+    for old in out_pack.glob("digits/*/*.png"):
+        old.unlink()
+    S = 128  # working canvas
+
+    def norm_mask(r):
+        rgba = cv2.imread(str(WORK / "glyphs" / f"{r['id']}.png"), cv2.IMREAD_UNCHANGED)
+        a = rgba[:, :, 3]
+        # adaptive threshold: user-role ink is softer — a fixed cut shreds it
+        on = a[a > 8]
+        if on.size == 0:
+            return None
+        thr = max(16, int(np.percentile(on, 50) * 0.45))
+        m = ((a > thr).astype(np.uint8)) * 255
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        ys, xs = np.nonzero(m)
+        if len(ys) == 0:
+            return None
+        crop = m[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+        h, w = crop.shape
+        s = (S - 36) / max(h, w)
+        crop = cv2.resize(crop, (max(1, int(w * s)), max(1, int(h * s))))
+        c = np.zeros((S, S), np.uint8)
+        y0, x0 = (S - crop.shape[0]) // 2, (S - crop.shape[1]) // 2
+        c[y0 : y0 + crop.shape[0], x0 : x0 + crop.shape[1]] = crop
+        return c
+
+    def sdf(mask):
+        m = (mask > 64).astype(np.uint8)
+        return cv2.distanceTransform(1 - m, cv2.DIST_L2, 5) - cv2.distanceTransform(m, cv2.DIST_L2, 5)
+
+    def elastic(field_shape, amp, sigma):
+        d = rng.standard_normal(field_shape).astype(np.float32)
+        return cv2.GaussianBlur(d, (0, 0), sigma) * amp
+
+    manifest = {"name": "souvenir", "digits": {"given": {}, "user": {}}}
+    for role in ROLES:
+        ink = np.float32(INK_TARGET[role])
+        for d in range(1, 10):
+            pool = [m for r in rows if r["role"] == role and r["label"] == str(d) if (m := norm_mask(r)) is not None]
+            if len(pool) < 2:
+                continue
+            sdfs = [sdf(m) for m in pool]
+            # morph only between lookalikes: a random partner can be a
+            # differently-shaped exemplar and the midpoint is a mongrel
+            bin_pool = [(m > 64) for m in pool]
+
+            def iou_m(a, b):
+                return (a & b).sum() / max(1, (a | b).sum())
+
+            partners = [
+                max((j for j in range(len(pool)) if j != i), key=lambda j: iou_m(bin_pool[i], bin_pool[j]))
+                for i in range(len(pool))
+            ]
+            paths = []
+            for k in range(per_class):
+                i = int(rng.integers(len(pool)))
+                j = partners[i]
+                t = rng.uniform(0.25, 0.5)  # stay nearer the anchor exemplar
+                s = (1 - t) * sdfs[i] + t * sdfs[j]
+                gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
+                s = cv2.remap(
+                    s, gx + elastic((S, S), 3.0, 10), gy + elastic((S, S), 3.0, 10), cv2.INTER_LINEAR
+                )
+                s += rng.uniform(-0.7, 0.7)  # stroke-width jitter
+                alpha = np.clip((0.75 - s) / 1.5, 0, 1)  # soft pen edge
+                ripple = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 1.5)
+                alpha = np.clip(alpha * (1 + 0.25 * ripple), 0, 1)
+                a8 = (alpha * 255).astype(np.uint8)
+                if (a8 > 0).any():
+                    core = float(np.percentile(a8[a8 > 0], 90))
+                    if core > 0:
+                        a8 = np.clip(a8.astype(np.float32) * (235.0 / core), 0, 255).astype(np.uint8)
+                shade = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 3)
+                rgb = np.clip(ink[None, None, :] * (1 + 0.18 * shade[..., None]), 0, 255).astype(np.uint8)
+                out = np.dstack([rgb, a8])
+                out = cv2.resize(out, (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
+                rel = f"digits/{role}/{d}_s{k:02d}.png"
+                dst = out_pack / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                save_png(dst, out)  # ink stacked as BGR + alpha = BGRA, save_png's contract
+                paths.append(rel)
+            manifest["digits"][role][str(d)] = paths
+    src_paper = PACK / "paper.png"
+    if src_paper.exists():
+        import shutil
+
+        shutil.copy(src_paper, out_pack / "paper.png")
+        manifest["paper"] = "paper.png"
+    manifest["copyright"] = STAMP
+    (out_pack / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
+    print(f"synthesized {total} glyphs -> {out_pack}/manifest.json")
+
+
 def stage_verify(path):
     import hashlib
     import hmac
@@ -708,6 +810,8 @@ if __name__ == "__main__":
         stage_review()
     elif stage == "pin":
         stage_pin(sys.argv[2:])
+    elif stage == "synth":
+        stage_synth()
     elif stage == "verify":
         stage_verify(sys.argv[2])
     elif stage == "paper":
