@@ -476,13 +476,15 @@ def watermark(img):
 
 
 def stage_synth(per_class=10, seed=7):
-    """Synthetic 'font' pack: each glyph is a morph between two of his real
-    digits (SDF interpolation) plus a small elastic warp and stroke-width
-    jitter — his style survives, but no emitted glyph is any actual scan.
-    Emits web/assets/souvenir/ with the same stamp + watermark as grandpere."""
+    """The built font: each glyph is a blend of 3-4 of his real digits (SDF
+    space) plus elastic warp — his style, no actual scan. Writes INTO the
+    souvenir pack (web/assets/grandpere), replacing the pictured glyphs; run
+    `emit` instead to restore the real scans. Same stamp + watermark, and the
+    same finishing touch (harmonize_ink) as the real pack, so the approved
+    ink look carries over by construction."""
     rng = np.random.default_rng(seed)
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
-    out_pack = ROOT / "web" / "assets" / "souvenir"
+    out_pack = PACK
     for old in out_pack.glob("digits/*/*.png"):
         old.unlink()
     S = 128  # working canvas
@@ -517,13 +519,17 @@ def stage_synth(per_class=10, seed=7):
         d = rng.standard_normal(field_shape).astype(np.float32)
         return cv2.GaussianBlur(d, (0, 0), sigma) * amp
 
-    manifest = {"name": "souvenir", "digits": {"given": {}, "user": {}}}
+    manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
     for role in ROLES:
         ink = np.float32(INK_TARGET[role])
         for d in range(1, 10):
             pool = [m for r in rows if r["role"] == role and r["label"] == str(d) if (m := norm_mask(r)) is not None]
             if len(pool) < 2:
                 continue
+            # runt gate: a blend of fragmented masks can come out shrunken or
+            # broken; anything under 60% of the pool's median ink coverage is
+            # rejected and redrawn
+            pool_cov = float(np.median([(m > 64).sum() for m in pool]))
             sdfs = [sdf(m) for m in pool]
             # blend 3-4 exemplars, not a near-copy pair: measured on the pack,
             # pair-morphs sat at 0.79 IoU to their nearest scan while his own
@@ -538,42 +544,44 @@ def stage_synth(per_class=10, seed=7):
 
             paths = []
             for k in range(per_class):
-                i = int(rng.integers(len(pool)))
-                near = sorted((j for j in range(len(pool)) if j != i), key=lambda j: -iou_m(bin_pool[i], bin_pool[j]))
-                circle = near[: min(6, len(near))]
-                picks = [i] + list(rng.choice(circle, min(3, len(circle)), replace=False))
-                # concentrated dirichlet: flat draws land near corners and one
-                # exemplar dominates — that's a near-copy again
-                w = rng.dirichlet(np.ones(len(picks)) * 4.0)
-                s = sum(wi * sdfs[p] for wi, p in zip(w, picks))
-                gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
-                s = cv2.remap(
-                    s, gx + elastic((S, S), 3.0, 10), gy + elastic((S, S), 3.0, 10), cv2.INTER_LINEAR
-                )
-                s += rng.uniform(-0.7, 0.7)  # stroke-width jitter
-                alpha = np.clip((0.75 - s) / 1.5, 0, 1)  # soft pen edge
-                ripple = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 1.5)
-                alpha = np.clip(alpha * (1 + 0.25 * ripple), 0, 1)
-                a8 = (alpha * 255).astype(np.uint8)
-                if (a8 > 0).any():
-                    core = float(np.percentile(a8[a8 > 0], 90))
-                    if core > 0:
-                        a8 = np.clip(a8.astype(np.float32) * (235.0 / core), 0, 255).astype(np.uint8)
+                a8 = None
+                for _ in range(12):
+                    i = int(rng.integers(len(pool)))
+                    near = sorted(
+                        (j for j in range(len(pool)) if j != i), key=lambda j: -iou_m(bin_pool[i], bin_pool[j])
+                    )
+                    circle = near[: min(6, len(near))]
+                    picks = [i] + list(rng.choice(circle, min(3, len(circle)), replace=False))
+                    # concentrated dirichlet: flat draws land near corners and one
+                    # exemplar dominates — that's a near-copy again
+                    w = rng.dirichlet(np.ones(len(picks)) * 4.0)
+                    s = sum(wi * sdfs[p] for wi, p in zip(w, picks))
+                    gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
+                    s = cv2.remap(
+                        s, gx + elastic((S, S), 3.0, 10), gy + elastic((S, S), 3.0, 10), cv2.INTER_LINEAR
+                    )
+                    s += rng.uniform(-0.7, 0.7)  # stroke-width jitter
+                    alpha = np.clip((0.75 - s) / 1.5, 0, 1)  # soft pen edge
+                    ripple = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 1.5)
+                    alpha = np.clip(alpha * (1 + 0.25 * ripple), 0, 1)
+                    cand = (alpha * 255).astype(np.uint8)
+                    n_comp = cv2.connectedComponents((cand > 96).astype(np.uint8))[0] - 1
+                    if (cand > 96).sum() >= 0.6 * pool_cov and n_comp <= 3:
+                        a8 = cand
+                        break
+                if a8 is None:
+                    a8 = cand  # 12 tries, keep the last rather than a hole in the pack
                 shade = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 3)
                 rgb = np.clip(ink[None, None, :] * (1 + 0.18 * shade[..., None]), 0, 255).astype(np.uint8)
-                out = np.dstack([rgb, a8])
-                out = cv2.resize(out, (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
+                out = cv2.resize(np.dstack([rgb, a8]), (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
+                out = harmonize_ink(out, role)  # the approved finishing touch, same as emit
                 rel = f"digits/{role}/{d}_s{k:02d}.png"
                 dst = out_pack / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 save_png(dst, out)  # ink stacked as BGR + alpha = BGRA, save_png's contract
                 paths.append(rel)
             manifest["digits"][role][str(d)] = paths
-    src_paper = PACK / "paper.png"
-    if src_paper.exists():
-        import shutil
-
-        shutil.copy(src_paper, out_pack / "paper.png")
+    if (out_pack / "paper.png").exists():
         manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
     (out_pack / "manifest.json").write_text(json.dumps(manifest, indent=1))
