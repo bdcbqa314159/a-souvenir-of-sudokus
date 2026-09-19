@@ -378,7 +378,10 @@ def harmonize_ink(rgba, role):
     if (a > 0).any():
         core = float(np.percentile(a[a > 0], 90))
         if core > 0:
-            rgba[:, :, 3] = np.clip(a.astype(np.float32) * (235.0 / core), 0, 255).astype(np.uint8)
+            af = np.clip(a.astype(np.float32) * (245.0 / core), 0, 255) / 255.0
+            # gamma < 1 solidifies the stroke body ("pen a bit clearer"):
+            # mid-alpha mush becomes ink while the soft edge tail survives
+            rgba[:, :, 3] = (np.power(af, 0.55) * 255).astype(np.uint8)
     return rgba
 
 
@@ -413,7 +416,8 @@ def stage_emit(max_variants=10):
                 sq = np.zeros((side, side, 4), np.uint8)
                 y0, x0 = (side - h) // 2, (side - w) // 2
                 sq[y0 : y0 + h, x0 : x0 + w] = rgba
-                sq[:, :, 3] = cv2.GaussianBlur(sq[:, :, 3], (3, 3), 0)  # soften edges
+                # no second blur: glyph_rgba already softened once, and the
+                # extra pass is what made the pen read washed instead of inked
                 out = cv2.resize(sq, (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
                 rel = f"digits/{role}/{d}_{r['id']}.png"
                 dst = PACK / rel
