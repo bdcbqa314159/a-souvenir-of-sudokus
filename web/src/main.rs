@@ -24,13 +24,42 @@ extern "C" {
 /// loader probes grandpere first (so the packaged desktop app opens straight
 /// into his handwriting) and falls back to the placeholder. The loader sets
 /// the store before the first render reads it.
-fn pack_store() -> &'static std::sync::OnceLock<String> {
-    static PACK: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+fn pack_store() -> &'static std::sync::Mutex<Option<String>> {
+    static PACK: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     &PACK
 }
 
-fn pack() -> &'static str {
-    pack_store().get().map(String::as_str).unwrap_or("assets/placeholder")
+fn pack() -> String {
+    pack_store().lock().unwrap().clone().unwrap_or_else(|| "assets/placeholder".into())
+}
+
+/// Fetch a pack's manifest, install it (pack path, paper, digit manifest).
+/// Used at startup and by the classic/souvenir toggle.
+async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
+    // cache-buster: a stale cached manifest points at pack files that
+    // no longer exist after a re-emit ("broken images, wrong background")
+    let url = format!("{cand}/manifest.json?t={}", js_sys::Date::now() as u64);
+    let Ok(rsp) = gloo_net::http::Request::get(&url).send().await else {
+        return false;
+    };
+    let Ok(m) = rsp.json::<Value>().await else { return false };
+    let Ok(parsed) = serde_json::from_value::<Manifest>(m["digits"].clone()) else {
+        return false;
+    };
+    *pack_store().lock().unwrap() = Some(cand.clone());
+    // a pack may bring its own paper — the page becomes his notebook;
+    // a paperless pack (classic) falls back to the plain CSS cream
+    if let Some(body) = document().body() {
+        let style = body.style();
+        if let Some(paper) = m["paper"].as_str() {
+            let _ = style.set_property("background-image", &format!("url('{cand}/{paper}')"));
+            let _ = style.set_property("background-size", "540px");
+        } else {
+            let _ = style.remove_property("background-image");
+        }
+    }
+    manifest.set(Some(parsed));
+    true
 }
 
 fn url_pack() -> Option<String> {
@@ -106,6 +135,7 @@ struct T {
     not_markable: &'static str,
     erase: &'static str,
     diff_hint: &'static str,
+    classic: &'static str,
 }
 
 const EN: T = T {
@@ -147,6 +177,7 @@ const EN: T = T {
     not_markable: "that cell already holds a value",
     erase: "erase",
     diff_hint: "leave phantom mode to change difficulty",
+    classic: "classic",
 };
 
 const FR: T = T {
@@ -188,6 +219,7 @@ const FR: T = T {
     not_markable: "cette case contient déjà un chiffre",
     erase: "effacer",
     diff_hint: "quitte le mode fantôme pour changer de difficulté",
+    classic: "classique",
 };
 
 const ES: T = T {
@@ -229,6 +261,7 @@ const ES: T = T {
     not_markable: "esa celda ya contiene una cifra",
     erase: "borrar",
     diff_hint: "sal del modo fantasma para cambiar la dificultad",
+    classic: "clásico",
 };
 
 fn t(lang: Lang) -> &'static T {
@@ -408,6 +441,8 @@ fn App() -> impl IntoView {
     // dev mode (?dev in the URL): assists uncapped — the debugging use survives
     let dev = window().location().search().unwrap_or_default().contains("dev");
     let flip_anim = RwSignal::new(false);
+    // classic/souvenir toggle: shown only when the souvenir pack exists
+    let has_souvenir = RwSignal::new(false);
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -423,36 +458,15 @@ fn App() -> impl IntoView {
         };
         let mut loaded = false;
         for cand in candidates {
-            // cache-buster: a stale cached manifest points at pack files that
-            // no longer exist after a re-emit ("broken images, wrong background")
-            let url = format!("{cand}/manifest.json?t={}", js_sys::Date::now() as u64);
-            let Ok(rsp) = gloo_net::http::Request::get(&url).send().await
-            else {
-                continue;
-            };
-            let Ok(m) = rsp.json::<Value>().await else { continue };
-            let Ok(parsed) = serde_json::from_value::<Manifest>(m["digits"].clone()) else {
-                continue;
-            };
-            let _ = pack_store().set(cand);
-            // a pack may bring its own paper — the page becomes his notebook
-            if let Some(paper) = m["paper"].as_str() {
-                if let Some(body) = document().body() {
-                    let style = body.style();
-                    let _ = style.set_property(
-                        "background-image",
-                        &format!("url('{}/{}')", pack(), paper),
-                    );
-                    let _ = style.set_property("background-size", "540px");
-                }
+            if load_pack(cand, manifest).await {
+                loaded = true;
+                break;
             }
-            manifest.set(Some(parsed));
-            loaded = true;
-            break;
         }
         if !loaded {
             msg.set(t(lang.get_untracked()).no_pack.into());
         }
+        has_souvenir.set(pack() == "assets/grandpere");
         let rsp = cmd(json!({"cmd": "new", "difficulty": "medium"}));
         if rsp["ok"].as_bool() == Some(true) {
             game.set(Some(rsp["game"].clone()));
@@ -970,6 +984,23 @@ fn App() -> impl IntoView {
             <button class:on=move || mode.get() == Mode::Phantom on:click=toggle_phantom>
                 {move || t(lang.get()).phantom}
             </button>
+            {move || has_souvenir.get().then(|| {
+                let on_souvenir = move || pack() == "assets/grandpere";
+                view! {
+                    <button on:click=move |_| {
+                        let target = if on_souvenir() { "assets/placeholder" } else { "assets/grandpere" };
+                        spawn_local(async move {
+                            load_pack(target.into(), manifest).await;
+                        });
+                    }>
+                        {move || {
+                            // read manifest so the label re-renders on switch
+                            manifest.track();
+                            if on_souvenir() { t(lang.get()).classic.to_string() } else { "souvenir".to_string() }
+                        }}
+                    </button>
+                }
+            })}
             <span class="seg">
                 {[(Lang::Fr, "FR"), (Lang::En, "EN"), (Lang::Es, "ES")]
                     .into_iter()
