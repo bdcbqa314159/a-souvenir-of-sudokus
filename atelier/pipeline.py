@@ -475,6 +475,120 @@ def watermark(img):
     return flat.reshape(img.shape)
 
 
+def stage_synth(per_class=10, seed=7):
+    """The built font: each glyph is a blend of 3-4 of his real digits (SDF
+    space) plus elastic warp — his style, no actual scan. Writes INTO the
+    souvenir pack (web/assets/grandpere), replacing the pictured glyphs; run
+    `emit` instead to restore the real scans. Same stamp + watermark, and the
+    same finishing touch (harmonize_ink) as the real pack, so the approved
+    ink look carries over by construction."""
+    rng = np.random.default_rng(seed)
+    rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
+    out_pack = PACK
+    for old in out_pack.glob("digits/*/*.png"):
+        old.unlink()
+    S = 128  # working canvas
+
+    def norm_mask(r):
+        rgba = cv2.imread(str(WORK / "glyphs" / f"{r['id']}.png"), cv2.IMREAD_UNCHANGED)
+        a = rgba[:, :, 3]
+        # adaptive threshold: user-role ink is softer — a fixed cut shreds it
+        on = a[a > 8]
+        if on.size == 0:
+            return None
+        thr = max(16, int(np.percentile(on, 50) * 0.45))
+        m = ((a > thr).astype(np.uint8)) * 255
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+        ys, xs = np.nonzero(m)
+        if len(ys) == 0:
+            return None
+        crop = m[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+        h, w = crop.shape
+        s = (S - 36) / max(h, w)
+        crop = cv2.resize(crop, (max(1, int(w * s)), max(1, int(h * s))))
+        c = np.zeros((S, S), np.uint8)
+        y0, x0 = (S - crop.shape[0]) // 2, (S - crop.shape[1]) // 2
+        c[y0 : y0 + crop.shape[0], x0 : x0 + crop.shape[1]] = crop
+        return c
+
+    def sdf(mask):
+        m = (mask > 64).astype(np.uint8)
+        return cv2.distanceTransform(1 - m, cv2.DIST_L2, 5) - cv2.distanceTransform(m, cv2.DIST_L2, 5)
+
+    def elastic(field_shape, amp, sigma):
+        d = rng.standard_normal(field_shape).astype(np.float32)
+        return cv2.GaussianBlur(d, (0, 0), sigma) * amp
+
+    manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
+    for role in ROLES:
+        ink = np.float32(INK_TARGET[role])
+        for d in range(1, 10):
+            pool = [m for r in rows if r["role"] == role and r["label"] == str(d) if (m := norm_mask(r)) is not None]
+            if len(pool) < 2:
+                continue
+            # runt gate: a blend of fragmented masks can come out shrunken or
+            # broken; anything under 60% of the pool's median ink coverage is
+            # rejected and redrawn
+            pool_cov = float(np.median([(m > 64).sum() for m in pool]))
+            sdfs = [sdf(m) for m in pool]
+            # blend 3-4 exemplars, not a near-copy pair: measured on the pack,
+            # pair-morphs sat at 0.79 IoU to their nearest scan while his own
+            # digits sit at 0.60 to each other — multi-blends land at his
+            # natural variation, so no output is close to any single scan.
+            # anchored around the 3 most-alike exemplars so the blend stays a
+            # coherent digit, not a mongrel of divergent shapes
+            bin_pool = [(m > 64) for m in pool]
+
+            def iou_m(a, b):
+                return (a & b).sum() / max(1, (a | b).sum())
+
+            paths = []
+            for k in range(per_class):
+                a8 = None
+                for _ in range(12):
+                    i = int(rng.integers(len(pool)))
+                    near = sorted(
+                        (j for j in range(len(pool)) if j != i), key=lambda j: -iou_m(bin_pool[i], bin_pool[j])
+                    )
+                    circle = near[: min(6, len(near))]
+                    picks = [i] + list(rng.choice(circle, min(3, len(circle)), replace=False))
+                    # concentrated dirichlet: flat draws land near corners and one
+                    # exemplar dominates — that's a near-copy again
+                    w = rng.dirichlet(np.ones(len(picks)) * 4.0)
+                    s = sum(wi * sdfs[p] for wi, p in zip(w, picks))
+                    gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
+                    s = cv2.remap(
+                        s, gx + elastic((S, S), 3.0, 10), gy + elastic((S, S), 3.0, 10), cv2.INTER_LINEAR
+                    )
+                    s += rng.uniform(-0.7, 0.7)  # stroke-width jitter
+                    alpha = np.clip((0.75 - s) / 1.5, 0, 1)  # soft pen edge
+                    ripple = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 1.5)
+                    alpha = np.clip(alpha * (1 + 0.25 * ripple), 0, 1)
+                    cand = (alpha * 255).astype(np.uint8)
+                    n_comp = cv2.connectedComponents((cand > 96).astype(np.uint8))[0] - 1
+                    if (cand > 96).sum() >= 0.6 * pool_cov and n_comp <= 3:
+                        a8 = cand
+                        break
+                if a8 is None:
+                    a8 = cand  # 12 tries, keep the last rather than a hole in the pack
+                shade = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 3)
+                rgb = np.clip(ink[None, None, :] * (1 + 0.18 * shade[..., None]), 0, 255).astype(np.uint8)
+                out = cv2.resize(np.dstack([rgb, a8]), (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
+                out = harmonize_ink(out, role)  # the approved finishing touch, same as emit
+                rel = f"digits/{role}/{d}_s{k:02d}.png"
+                dst = out_pack / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                save_png(dst, out)  # ink stacked as BGR + alpha = BGRA, save_png's contract
+                paths.append(rel)
+            manifest["digits"][role][str(d)] = paths
+    if (out_pack / "paper.png").exists():
+        manifest["paper"] = "paper.png"
+    manifest["copyright"] = STAMP
+    (out_pack / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
+    print(f"synthesized {total} glyphs -> {out_pack}/manifest.json")
+
+
 def stage_verify(path):
     import hashlib
     import hmac
@@ -708,6 +822,8 @@ if __name__ == "__main__":
         stage_review()
     elif stage == "pin":
         stage_pin(sys.argv[2:])
+    elif stage == "synth":
+        stage_synth()
     elif stage == "verify":
         stage_verify(sys.argv[2])
     elif stage == "paper":
