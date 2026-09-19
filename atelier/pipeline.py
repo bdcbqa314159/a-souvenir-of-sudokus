@@ -355,33 +355,19 @@ INK_BLEND = {"given": 0.5, "user": 0.75}  # 0 = photo color, 1 = flat UI ink
 
 
 def harmonize_ink(rgba, role):
-    """Pull glyph color toward the UI ink so digits read consistently on the
-    pack paper (the raw photo reds ranged washed-pink to maroon), keeping the
-    per-pixel stroke variation as a brightness ripple so they stay handwritten."""
-    ink = np.float32(INK_TARGET[role])
-    rgb = rgba[:, :, :3].astype(np.float32)
-    gray = cv2.cvtColor(rgb.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
-    ripple = (gray[..., None] - gray.mean()) * 0.35
-    k = INK_BLEND[role]
-    out = np.clip(rgb * (1 - k) + (ink + ripple) * k, 0, 255)
-    # equal darkness for every glyph: gain each glyph's stroke luminance onto
-    # the target ink's, so no digit reads lighter than its neighbours
-    core = rgba[:, :, 3] > 128
-    if core.any():
-        lum = np.float32([0.114, 0.587, 0.299])
-        gain = float(np.dot(ink, lum) / max(out[core].mean(axis=0) @ lum, 1.0))
-        out = out * np.clip(gain, 0.6, 1.4)
-    rgba[:, :, :3] = np.clip(out, 0, 255).astype(np.uint8)
-    # same intensity for every glyph: faint pen pressure varied per photo, so
-    # scale each glyph's alpha until its stroke core hits a common strength
+    """His shapes, type-solid ink: flat UI ink color and an alpha S-curve —
+    stroke body fully opaque, only the edge antialiased — so every digit
+    carries the exact same contrast, like a font drawn with his hand."""
+    rgba[:, :, :3] = np.uint8(INK_TARGET[role])
     a = rgba[:, :, 3]
     if (a > 0).any():
         core = float(np.percentile(a[a > 0], 90))
         if core > 0:
-            af = np.clip(a.astype(np.float32) * (245.0 / core), 0, 255) / 255.0
-            # gamma < 1 solidifies the stroke body ("pen a bit clearer"):
-            # mid-alpha mush becomes ink while the soft edge tail survives
-            rgba[:, :, 3] = (np.power(af, 0.55) * 255).astype(np.uint8)
+            af = np.clip(a.astype(np.float32) * (255.0 / core), 0, 255) / 255.0
+            # smoothstep: below lo transparent, above hi solid, ramp between
+            lo, hi = 0.2, 0.5  # lo high enough that ink bleed inside loops stays paper
+            t = np.clip((af - lo) / (hi - lo), 0, 1)
+            rgba[:, :, 3] = (t * t * (3 - 2 * t) * 255).astype(np.uint8)
     return rgba
 
 
