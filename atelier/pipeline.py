@@ -484,6 +484,24 @@ def stage_synth(per_class=10, seed=7):
     ink look carries over by construction."""
     rng = np.random.default_rng(seed)
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
+    # the same SVM that labels his real glyphs gates the generated ones:
+    # coverage checks pass chunky-but-malformed blends, a classifier doesn't
+    clf = fit_svm(rows)
+
+    def digit_proba(a8, d):
+        m = (a8 > 40).astype(np.uint8) * 255
+        ys, xs = np.nonzero(m)
+        if len(ys) == 0:
+            return 0.0
+        crop = m[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+        h, w = crop.shape
+        side = max(h, w)
+        sq = np.zeros((side, side), np.uint8)
+        sq[(side - h) // 2 : (side - h) // 2 + h, (side - w) // 2 : (side - w) // 2 + w] = crop
+        x = (cv2.resize(sq, (32, 32)).ravel() > 0).astype(np.float32)
+        p = clf.predict_proba(x[None])[0]
+        return float(p[list(clf.classes_).index(d)]) if d in clf.classes_ else 0.0
+
     out_pack = PACK
     for old in out_pack.glob("digits/*/*.png"):
         old.unlink()
@@ -523,13 +541,28 @@ def stage_synth(per_class=10, seed=7):
     for role in ROLES:
         ink = np.float32(INK_TARGET[role])
         for d in range(1, 10):
-            pool = [m for r in rows if r["role"] == role and r["label"] == str(d) if (m := norm_mask(r)) is not None]
+            pool, pinned_idx = [], []
+            for r in rows:
+                if r["role"] == role and r["label"] == str(d) and (m := norm_mask(r)) is not None:
+                    if r.get("pin"):
+                        pinned_idx.append(len(pool))
+                    pool.append(m)
             if len(pool) < 2:
                 continue
             # runt gate: a blend of fragmented masks can come out shrunken or
             # broken; anything under 60% of the pool's median ink coverage is
             # rejected and redrawn
             pool_cov = float(np.median([(m > 64).sum() for m in pool]))
+            # bold exemplars anchor more often: faint thin ones (his light-pen
+            # 9s) dragged whole blends down when they led
+            covs = np.array([(m > 64).sum() for m in pool], np.float64)
+            anchor_p = covs / covs.sum()
+            # pins steer the font: when a digit has pinned exemplars, only
+            # they anchor — the curation knob for "this 9, not that 9"
+            if pinned_idx:
+                anchor_p = np.zeros(len(pool))
+                anchor_p[pinned_idx] = covs[pinned_idx]
+                anchor_p /= anchor_p.sum()
             sdfs = [sdf(m) for m in pool]
             # blend 3-4 exemplars, not a near-copy pair: measured on the pack,
             # pair-morphs sat at 0.79 IoU to their nearest scan while his own
@@ -544,17 +577,19 @@ def stage_synth(per_class=10, seed=7):
 
             paths = []
             for k in range(per_class):
-                a8 = None
+                a8, best, best_score = None, None, -1.0
                 for _ in range(12):
-                    i = int(rng.integers(len(pool)))
+                    i = int(rng.choice(len(pool), p=anchor_p))
                     near = sorted(
                         (j for j in range(len(pool)) if j != i), key=lambda j: -iou_m(bin_pool[i], bin_pool[j])
                     )
                     circle = near[: min(6, len(near))]
                     picks = [i] + list(rng.choice(circle, min(3, len(circle)), replace=False))
                     # concentrated dirichlet: flat draws land near corners and one
-                    # exemplar dominates — that's a near-copy again
-                    w = rng.dirichlet(np.ones(len(picks)) * 4.0)
+                    # exemplar dominates — that's a near-copy again. Largest
+                    # weight goes to the anchor: thin features (his 9-tails)
+                    # smear away when the anchor doesn't lead its own blend.
+                    w = np.sort(rng.dirichlet(np.ones(len(picks)) * 4.0))[::-1]
                     s = sum(wi * sdfs[p] for wi, p in zip(w, picks))
                     gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
                     s = cv2.remap(
@@ -566,11 +601,17 @@ def stage_synth(per_class=10, seed=7):
                     alpha = np.clip(alpha * (1 + 0.25 * ripple), 0, 1)
                     cand = (alpha * 255).astype(np.uint8)
                     n_comp = cv2.connectedComponents((cand > 96).astype(np.uint8))[0] - 1
-                    if (cand > 96).sum() >= 0.6 * pool_cov and n_comp <= 3:
+                    cov = (cand > 96).sum()
+                    proba = digit_proba(cand, d)
+                    if cov >= 0.7 * pool_cov and n_comp <= 2 and proba >= 0.5:
                         a8 = cand
                         break
+                    # remember the least-bad attempt, judged mostly by the SVM
+                    score = proba + 0.3 * min(1.0, cov / max(1.0, pool_cov)) - 0.5 * max(0, n_comp - 2)
+                    if score > best_score:
+                        best, best_score = cand, score
                 if a8 is None:
-                    a8 = cand  # 12 tries, keep the last rather than a hole in the pack
+                    a8 = best  # 12 tries: least-bad beats a hole in the pack
                 shade = cv2.GaussianBlur(rng.standard_normal((S, S)).astype(np.float32), (0, 0), 3)
                 rgb = np.clip(ink[None, None, :] * (1 + 0.18 * shade[..., None]), 0, 255).astype(np.uint8)
                 out = cv2.resize(np.dstack([rgb, a8]), (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
