@@ -478,6 +478,7 @@ def watermark(img):
 # per-digit blend tuning for rows that need tighter, calmer blends than the
 # global recipe (higher alpha = more even mixing, lower amp = less warp)
 SYNTH_TUNE = {
+    ("user", "2"): {"alpha": 8.0, "amp": 2.0},
     ("user", "5"): {"alpha": 8.0, "amp": 2.0, "reroll": 1},
     # holes: required enclosed-background regions — an open-hook 6 passes
     # every intensity check but encloses nothing
