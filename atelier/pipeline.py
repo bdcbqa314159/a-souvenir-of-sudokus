@@ -479,8 +479,19 @@ def watermark(img):
 # global recipe (higher alpha = more even mixing, lower amp = less warp)
 SYNTH_TUNE = {
     ("user", "5"): {"alpha": 8.0, "amp": 2.0, "reroll": 1},
-    ("user", "6"): {"alpha": 8.0, "amp": 2.0, "reroll": 1},
+    # holes: required enclosed-background regions — an open-hook 6 passes
+    # every intensity check but encloses nothing
+    ("user", "6"): {"alpha": 8.0, "amp": 2.0, "reroll": 1, "holes": 1},
 }
+
+
+def count_holes(mask_bool):
+    """Enclosed background regions (loop interiors): background components
+    that never touch the canvas border."""
+    inv = (~mask_bool).astype(np.uint8)
+    n, labels = cv2.connectedComponents(inv)
+    border = set(np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]])))
+    return sum(1 for lab in range(1, n) if lab not in border and (labels == lab).sum() >= 12)
 
 
 def stage_synth(per_class=10, seed=7, targets=None):
@@ -634,7 +645,8 @@ def stage_synth(per_class=10, seed=7, targets=None):
                     # a pale streak splits the glyph at high threshold even
                     # when it's connected at low threshold — catch that too
                     n_hi = cv2.connectedComponents((cand > 170).astype(np.uint8))[0] - 1
-                    if cov >= 0.7 * pool_cov and n_comp <= 2 and n_hi <= 2 and proba >= 0.5 and solid:
+                    holes_ok = count_holes(cand > 96) >= tune.get("holes", 0)
+                    if cov >= 0.7 * pool_cov and n_comp <= 2 and n_hi <= 2 and proba >= 0.5 and solid and holes_ok:
                         a8 = cand
                         break
                     # remember the least-bad attempt, judged mostly by the SVM
