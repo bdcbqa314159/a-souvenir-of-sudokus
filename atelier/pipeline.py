@@ -475,14 +475,37 @@ def watermark(img):
     return flat.reshape(img.shape)
 
 
-def stage_synth(per_class=10, seed=7):
+# per-digit blend tuning for rows that need tighter, calmer blends than the
+# global recipe (higher alpha = more even mixing, lower amp = less warp)
+SYNTH_TUNE = {
+    ("user", "2"): {"alpha": 8.0, "amp": 2.0},
+    ("user", "5"): {"alpha": 8.0, "amp": 2.0, "reroll": 1},
+    # holes: required enclosed-background regions — an open-hook 6 passes
+    # every intensity check but encloses nothing
+    ("user", "6"): {"alpha": 8.0, "amp": 2.0, "reroll": 1, "holes": 1},
+}
+
+
+def count_holes(mask_bool):
+    """Enclosed background regions (loop interiors): background components
+    that never touch the canvas border."""
+    inv = (~mask_bool).astype(np.uint8)
+    n, labels = cv2.connectedComponents(inv)
+    border = set(np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]])))
+    return sum(1 for lab in range(1, n) if lab not in border and (labels == lab).sum() >= 12)
+
+
+def stage_synth(per_class=10, seed=7, targets=None):
     """The built font: each glyph is a blend of 3-4 of his real digits (SDF
     space) plus elastic warp — his style, no actual scan. Writes INTO the
     souvenir pack (web/assets/grandpere), replacing the pictured glyphs; run
     `emit` instead to restore the real scans. Same stamp + watermark, and the
     same finishing touch (harmonize_ink) as the real pack, so the approved
-    ink look carries over by construction."""
-    rng = np.random.default_rng(seed)
+    ink look carries over by construction.
+    `targets` (e.g. ["user5", "given3"]) regenerates ONLY those digits and
+    leaves every other row's files untouched — approved rows stay frozen.
+    Each digit gets its own rng stream, so re-rolling one digit can never
+    reshuffle another."""
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
     # the same SVM that labels his real glyphs gates the generated ones:
     # coverage checks pass chunky-but-malformed blends, a classifier doesn't
@@ -503,8 +526,11 @@ def stage_synth(per_class=10, seed=7):
         return float(p[list(clf.classes_).index(d)]) if d in clf.classes_ else 0.0
 
     out_pack = PACK
-    for old in out_pack.glob("digits/*/*.png"):
-        old.unlink()
+    manifest_path = out_pack / "manifest.json"
+    old_man = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+    if targets is None:
+        for old in out_pack.glob("digits/*/*.png"):
+            old.unlink()
     S = 128  # working canvas
 
     def norm_mask(r):
@@ -541,6 +567,16 @@ def stage_synth(per_class=10, seed=7):
     for role in ROLES:
         ink = np.float32(INK_TARGET[role])
         for d in range(1, 10):
+            if targets is not None and f"{role}{d}" not in targets:
+                # frozen row: keep its existing files and manifest entry
+                if old_man and str(d) in old_man["digits"].get(role, {}):
+                    manifest["digits"][role][str(d)] = old_man["digits"][role][str(d)]
+                continue
+            tune = SYNTH_TUNE.get((role, str(d)), {})
+            alpha_c, amp = tune.get("alpha", 4.0), tune.get("amp", 3.0)
+            # own rng stream per digit: re-rolling one digit never reshuffles
+            # another; "reroll" in SYNTH_TUNE bumps a digit onto a luckier stream
+            rng = np.random.default_rng([seed + tune.get("reroll", 0), {"given": 0, "user": 1}[role], d])
             pool, pinned_idx = [], []
             for r in rows:
                 if r["role"] == role and r["label"] == str(d) and (m := norm_mask(r)) is not None:
@@ -589,11 +625,11 @@ def stage_synth(per_class=10, seed=7):
                     # exemplar dominates — that's a near-copy again. Largest
                     # weight goes to the anchor: thin features (his 9-tails)
                     # smear away when the anchor doesn't lead its own blend.
-                    w = np.sort(rng.dirichlet(np.ones(len(picks)) * 4.0))[::-1]
+                    w = np.sort(rng.dirichlet(np.ones(len(picks)) * alpha_c))[::-1]
                     s = sum(wi * sdfs[p] for wi, p in zip(w, picks))
                     gx, gy = np.meshgrid(np.arange(S, dtype=np.float32), np.arange(S, dtype=np.float32))
                     s = cv2.remap(
-                        s, gx + elastic((S, S), 3.0, 10), gy + elastic((S, S), 3.0, 10), cv2.INTER_LINEAR
+                        s, gx + elastic((S, S), amp, 10), gy + elastic((S, S), amp, 10), cv2.INTER_LINEAR
                     )
                     s += rng.uniform(-0.7, 0.7)  # stroke-width jitter
                     alpha = np.clip((0.75 - s) / 1.5, 0, 1)  # soft pen edge
@@ -603,7 +639,15 @@ def stage_synth(per_class=10, seed=7):
                     n_comp = cv2.connectedComponents((cand > 96).astype(np.uint8))[0] - 1
                     cov = (cand > 96).sum()
                     proba = digit_proba(cand, d)
-                    if cov >= 0.7 * pool_cov and n_comp <= 2 and proba >= 0.5:
+                    # pale-streak integrity: where blended exemplars disagree
+                    # mid-stroke, alpha dips and the glyph looks broken even
+                    # though it's connected at low threshold
+                    solid = (cand > 170).sum() >= 0.6 * max(1, cov)
+                    # a pale streak splits the glyph at high threshold even
+                    # when it's connected at low threshold — catch that too
+                    n_hi = cv2.connectedComponents((cand > 170).astype(np.uint8))[0] - 1
+                    holes_ok = count_holes(cand > 96) >= tune.get("holes", 0)
+                    if cov >= 0.7 * pool_cov and n_comp <= 2 and n_hi <= 2 and proba >= 0.5 and solid and holes_ok:
                         a8 = cand
                         break
                     # remember the least-bad attempt, judged mostly by the SVM
@@ -864,7 +908,7 @@ if __name__ == "__main__":
     elif stage == "pin":
         stage_pin(sys.argv[2:])
     elif stage == "synth":
-        stage_synth()
+        stage_synth(targets=sys.argv[2:] or None)
     elif stage == "verify":
         stage_verify(sys.argv[2])
     elif stage == "paper":
