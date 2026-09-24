@@ -37,7 +37,8 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ORIGINALS = ROOT / "originals"
 WORK = ORIGINALS / "atelier-work"
-PACK = ROOT / "web" / "assets" / "grandpere"
+PACK = ROOT / "web" / "assets" / "grandpere"  # generated pack — COMMITTED to the public repo
+ABUELO = ROOT / "web" / "assets" / "abuelo"  # real-scan family pack — gitignored, this machine only
 SIDE = 1080
 CELL = SIDE // 9
 GLYPH = 96  # emitted asset size
@@ -386,11 +387,13 @@ def harmonize_ink(rgba, role):
 
 
 def stage_emit(max_variants=10):
+    """Real-scan family pack -> web/assets/abuelo/ (gitignored; NEVER commit).
+    The public repo carries only the generated pack (synth/genpaper -> PACK)."""
     rows = [r for r in load_meta() if r["label"] not in ("", "-1")]
-    manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
+    manifest = {"name": "abuelo", "digits": {"given": {}, "user": {}}}
     # start clean: stale glyphs from earlier emits otherwise linger in the pack
     # (and break the Tauri bundle when a cached build references a gone file)
-    for old in PACK.glob("digits/*/*.png"):
+    for old in ABUELO.glob("digits/*/*.png"):
         old.unlink()
     for role in ROLES:
         for d in range(1, 10):
@@ -420,18 +423,23 @@ def stage_emit(max_variants=10):
                 # extra pass is what made the pen read washed instead of inked
                 out = cv2.resize(sq, (GLYPH, GLYPH), interpolation=cv2.INTER_AREA)
                 rel = f"digits/{role}/{d}_{r['id']}.png"
-                dst = PACK / rel
+                dst = ABUELO / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 save_png(dst, out)
                 paths.append(rel)
             if paths:
                 manifest["digits"][role][str(d)] = paths
-    if (PACK / "paper.png").exists():
+    # the family pack keeps his real notebook page as paper
+    real_paper = WORK / "paper_real.png"
+    if real_paper.exists():
+        import shutil
+
+        shutil.copy(real_paper, ABUELO / "paper.png")
         manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
-    (PACK / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    (ABUELO / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
-    print(f"emitted {total} glyphs -> {PACK}/manifest.json")
+    print(f"emitted {total} glyphs -> {ABUELO}/manifest.json")
 
 
 PAPER_FADE = 0.35  # ruling contrast: 0 = full ink, 1 = flat cream
@@ -808,11 +816,59 @@ def stage_paper(stem=None):
         mask = cv2.dilate(red_mask(bgr) | dark_mask(bgr), np.ones((7, 7), np.uint8))
         clean = cv2.medianBlur(cv2.inpaint(bgr, mask, 5, cv2.INPAINT_TELEA), 3)
         name = src.stem
+    # PNG, not JPEG: the watermark lives in pixel LSBs and needs lossless.
+    # The real-page tile is family-pack material now — the public pack's
+    # paper comes from `genpaper` (fully synthetic).
+    save_png(WORK / "paper_real.png", clean)
+    print(f"paper from {name} -> {WORK}/paper_real.png (re-run emit to place it in the abuelo pack)")
+
+
+def stage_genpaper(seed=2026):
+    """Fully synthetic quad-ruled paper for the public pack: parameters
+    (period, tones, grain) measured from his real page, pixels 100% drawn.
+    Wrap-around wobble keeps the tile seamless under the web's 540px tiling.
+    Tones tuned by eye 2026-09-24: cooler cream, bluer stronger ruling."""
+    H = W = 1080
+    rng = np.random.default_rng(seed)
+    base = np.float32([238, 243, 245])
+    line_col = np.float32([238, 210, 178])
+    period, grain = 63.5, 3.73
+
+    paper = np.ones((H, W, 3), np.float32) * base
+    mottle = cv2.GaussianBlur(rng.standard_normal((H, W)).astype(np.float32), (0, 0), 45)
+    mottle /= np.abs(mottle).max() + 1e-6
+    paper *= 1 + 0.012 * mottle[..., None]
+    g = cv2.GaussianBlur(rng.standard_normal((H, W)).astype(np.float32), (0, 0), 0.7)
+    paper += g[..., None] * grain * 0.9
+
+    n = round(H / period)
+    step = H / n
+    yy, xx = np.meshgrid(np.arange(H, dtype=np.float32), np.arange(W, dtype=np.float32), indexing="ij")
+    ink = np.zeros((H, W), np.float32)
+
+    def wobble(amp):
+        k = int(rng.integers(2, 5))
+        ph = rng.uniform(0, 2 * np.pi, k)
+        a = rng.uniform(0.3, 1.0, k)
+        a *= amp / a.sum()
+        t = np.arange(H) * 2 * np.pi / H
+        return sum(ai * np.sin((i + 1) * t + p) for i, (ai, p) in enumerate(zip(a, ph))).astype(np.float32)
+
+    for i in range(n):
+        c = i * step + step / 2
+        for axis in (0, 1):
+            w = wobble(rng.uniform(1.2, 2.6))
+            width = rng.uniform(1.5, 2.2)
+            strength = rng.uniform(0.75, 1.0)
+            coord = (yy - c - w[None, :]) if axis == 0 else (xx - c - w[:, None])
+            d = np.abs(((coord + H / 2) % H) - H / 2)
+            ink += strength * np.exp(-((d / width) ** 2))
+    pv = cv2.GaussianBlur(rng.standard_normal((H, W)).astype(np.float32), (0, 0), 25)
+    ink = np.clip(ink * np.clip(1 + 0.35 * pv, 0.4, 1.6), 0, 1)[..., None]
+    out = np.clip(paper * (1 - ink * 0.9) + line_col * ink * 0.9, 0, 255).astype(np.uint8)
     PACK.mkdir(parents=True, exist_ok=True)
-    # PNG, not JPEG: the watermark lives in pixel LSBs and needs lossless
-    save_png(PACK / "paper.png", clean)
-    (PACK / "paper.jpg").unlink(missing_ok=True)
-    print(f"paper from {name} -> {PACK}/paper.png (re-run emit to update the manifest)")
+    save_png(PACK / "paper.png", out)
+    print(f"synthetic paper -> {PACK}/paper.png (stamped + watermarked)")
 
 
 def stage_pin(args):
@@ -911,6 +967,8 @@ if __name__ == "__main__":
         stage_synth(targets=sys.argv[2:] or None)
     elif stage == "verify":
         stage_verify(sys.argv[2])
+    elif stage == "genpaper":
+        stage_genpaper()
     elif stage == "paper":
         stage_paper(sys.argv[2] if len(sys.argv) > 2 else None)
     else:

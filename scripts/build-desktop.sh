@@ -8,9 +8,9 @@ cd "$(dirname "$0")/.."
 # privacy first: strip personal paths from anything we might distribute
 [ -f .cargo/config.toml ] || ./scripts/scrub-paths.sh
 
-# the pack never travels through git — copy it from the mac (USB/scp)
+# the generated pack is committed; a bare clone has it
 [ -d web/assets/grandpere ] || {
-  echo "MISSING web/assets/grandpere/ — copy the pack from the main machine first" >&2
+  echo "MISSING web/assets/grandpere/ — corrupted checkout?" >&2
   exit 1
 }
 
