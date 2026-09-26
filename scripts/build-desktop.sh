@@ -8,11 +8,44 @@ cd "$(dirname "$0")/.."
 # privacy first: strip personal paths from anything we might distribute
 [ -f .cargo/config.toml ] || ./scripts/scrub-paths.sh
 
-# the generated pack is committed; a bare clone has it
-[ -d web/assets/grandpere ] || {
-  echo "MISSING web/assets/grandpere/ — corrupted checkout?" >&2
-  exit 1
+# pack resolution: the ORIGINAL family pack (web/assets/abuelo/, real
+# handwriting, this-machine-only) is preferred by the game at runtime when
+# baked in; otherwise the GENERATED pack (committed to the repo) carries the
+# build. Validate whatever is present and say clearly which game this is.
+check_pack() {  # $1 = pack dir; prints glyph count or returns 1
+  python3 - "$1" <<'PY'
+import json, pathlib, sys
+d = pathlib.Path(sys.argv[1])
+try:
+    m = json.loads((d / "manifest.json").read_text())
+    refs = [p for role in m["digits"].values() for v in role.values() for p in v]
+    missing = [p for p in refs if not (d / p).exists()]
+    assert refs and not missing, f"{len(missing)} referenced files missing"
+    assert "paper" not in m or (d / m["paper"]).exists(), "paper missing"
+except Exception as e:
+    print(f"invalid: {e}", file=sys.stderr); sys.exit(1)
+print(len(refs))
+PY
 }
+
+HAVE_ORIGINAL=no
+if [ -d web/assets/abuelo ]; then
+  if n=$(check_pack web/assets/abuelo); then
+    HAVE_ORIGINAL=yes
+    echo "== pack: ORIGINAL family pack found ($n glyphs) — this build will show the real handwriting =="
+  else
+    echo "WARNING: web/assets/abuelo/ exists but is invalid — it will be ignored at runtime" >&2
+  fi
+fi
+if n=$(check_pack web/assets/grandpere); then
+  [ "$HAVE_ORIGINAL" = yes ] || echo "== pack: generated pack ($n glyphs) — public build =="
+else
+  [ "$HAVE_ORIGINAL" = yes ] || {
+    echo "FATAL: no usable pack. web/assets/grandpere is missing or invalid (corrupted checkout?)" >&2
+    echo "       re-clone the repo, or run 'atelier/pipeline.py synth && genpaper' on the main machine." >&2
+    exit 1
+  }
+fi
 
 # engine -> wasm, with the pinned emsdk (cloned per machine, gitignored)
 if [ ! -d .emsdk ]; then
