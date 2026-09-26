@@ -1,0 +1,227 @@
+{
+ "name": "grandpere",
+ "digits": {
+  "given": {
+   "1": [
+    "digits/given/1_s00.png",
+    "digits/given/1_s01.png",
+    "digits/given/1_s02.png",
+    "digits/given/1_s03.png",
+    "digits/given/1_s04.png",
+    "digits/given/1_s05.png",
+    "digits/given/1_s06.png",
+    "digits/given/1_s07.png",
+    "digits/given/1_s08.png",
+    "digits/given/1_s09.png"
+   ],
+   "2": [
+    "digits/given/2_s00.png",
+    "digits/given/2_s01.png",
+    "digits/given/2_s02.png",
+    "digits/given/2_s03.png",
+    "digits/given/2_s04.png",
+    "digits/given/2_s05.png",
+    "digits/given/2_s06.png",
+    "digits/given/2_s07.png",
+    "digits/given/2_s08.png",
+    "digits/given/2_s09.png"
+   ],
+   "3": [
+    "digits/given/3_s00.png",
+    "digits/given/3_s01.png",
+    "digits/given/3_s02.png",
+    "digits/given/3_s03.png",
+    "digits/given/3_s04.png",
+    "digits/given/3_s05.png",
+    "digits/given/3_s06.png",
+    "digits/given/3_s07.png",
+    "digits/given/3_s08.png",
+    "digits/given/3_s09.png"
+   ],
+   "4": [
+    "digits/given/4_s00.png",
+    "digits/given/4_s01.png",
+    "digits/given/4_s02.png",
+    "digits/given/4_s03.png",
+    "digits/given/4_s04.png",
+    "digits/given/4_s05.png",
+    "digits/given/4_s06.png",
+    "digits/given/4_s07.png",
+    "digits/given/4_s08.png",
+    "digits/given/4_s09.png"
+   ],
+   "5": [
+    "digits/given/5_s00.png",
+    "digits/given/5_s01.png",
+    "digits/given/5_s02.png",
+    "digits/given/5_s03.png",
+    "digits/given/5_s04.png",
+    "digits/given/5_s05.png",
+    "digits/given/5_s06.png",
+    "digits/given/5_s07.png",
+    "digits/given/5_s08.png",
+    "digits/given/5_s09.png"
+   ],
+   "6": [
+    "digits/given/6_s00.png",
+    "digits/given/6_s01.png",
+    "digits/given/6_s02.png",
+    "digits/given/6_s03.png",
+    "digits/given/6_s04.png",
+    "digits/given/6_s05.png",
+    "digits/given/6_s06.png",
+    "digits/given/6_s07.png",
+    "digits/given/6_s08.png",
+    "digits/given/6_s09.png"
+   ],
+   "7": [
+    "digits/given/7_s00.png",
+    "digits/given/7_s01.png",
+    "digits/given/7_s02.png",
+    "digits/given/7_s03.png",
+    "digits/given/7_s04.png",
+    "digits/given/7_s05.png",
+    "digits/given/7_s06.png",
+    "digits/given/7_s07.png",
+    "digits/given/7_s08.png",
+    "digits/given/7_s09.png"
+   ],
+   "8": [
+    "digits/given/8_s00.png",
+    "digits/given/8_s01.png",
+    "digits/given/8_s02.png",
+    "digits/given/8_s03.png",
+    "digits/given/8_s04.png",
+    "digits/given/8_s05.png",
+    "digits/given/8_s06.png",
+    "digits/given/8_s07.png",
+    "digits/given/8_s08.png",
+    "digits/given/8_s09.png"
+   ],
+   "9": [
+    "digits/given/9_s00.png",
+    "digits/given/9_s01.png",
+    "digits/given/9_s02.png",
+    "digits/given/9_s03.png",
+    "digits/given/9_s04.png",
+    "digits/given/9_s05.png",
+    "digits/given/9_s06.png",
+    "digits/given/9_s07.png",
+    "digits/given/9_s08.png",
+    "digits/given/9_s09.png"
+   ]
+  },
+  "user": {
+   "1": [
+    "digits/user/1_s00.png",
+    "digits/user/1_s01.png",
+    "digits/user/1_s02.png",
+    "digits/user/1_s03.png",
+    "digits/user/1_s04.png",
+    "digits/user/1_s05.png",
+    "digits/user/1_s06.png",
+    "digits/user/1_s07.png",
+    "digits/user/1_s08.png",
+    "digits/user/1_s09.png"
+   ],
+   "2": [
+    "digits/user/2_s00.png",
+    "digits/user/2_s01.png",
+    "digits/user/2_s02.png",
+    "digits/user/2_s03.png",
+    "digits/user/2_s04.png",
+    "digits/user/2_s05.png",
+    "digits/user/2_s06.png",
+    "digits/user/2_s07.png",
+    "digits/user/2_s08.png",
+    "digits/user/2_s09.png"
+   ],
+   "3": [
+    "digits/user/3_s00.png",
+    "digits/user/3_s01.png",
+    "digits/user/3_s02.png",
+    "digits/user/3_s03.png",
+    "digits/user/3_s04.png",
+    "digits/user/3_s05.png",
+    "digits/user/3_s06.png",
+    "digits/user/3_s07.png",
+    "digits/user/3_s08.png",
+    "digits/user/3_s09.png"
+   ],
+   "4": [
+    "digits/user/4_s00.png",
+    "digits/user/4_s01.png",
+    "digits/user/4_s02.png",
+    "digits/user/4_s03.png",
+    "digits/user/4_s04.png",
+    "digits/user/4_s05.png",
+    "digits/user/4_s06.png",
+    "digits/user/4_s07.png",
+    "digits/user/4_s08.png",
+    "digits/user/4_s09.png"
+   ],
+   "5": [
+    "digits/user/5_s00.png",
+    "digits/user/5_s01.png",
+    "digits/user/5_s02.png",
+    "digits/user/5_s03.png",
+    "digits/user/5_s04.png",
+    "digits/user/5_s05.png",
+    "digits/user/5_s06.png",
+    "digits/user/5_s07.png",
+    "digits/user/5_s08.png",
+    "digits/user/5_s09.png"
+   ],
+   "6": [
+    "digits/user/6_s00.png",
+    "digits/user/6_s01.png",
+    "digits/user/6_s02.png",
+    "digits/user/6_s03.png",
+    "digits/user/6_s04.png",
+    "digits/user/6_s05.png",
+    "digits/user/6_s06.png",
+    "digits/user/6_s07.png",
+    "digits/user/6_s08.png",
+    "digits/user/6_s09.png"
+   ],
+   "7": [
+    "digits/user/7_s00.png",
+    "digits/user/7_s01.png",
+    "digits/user/7_s02.png",
+    "digits/user/7_s03.png",
+    "digits/user/7_s04.png",
+    "digits/user/7_s05.png",
+    "digits/user/7_s06.png",
+    "digits/user/7_s07.png",
+    "digits/user/7_s08.png",
+    "digits/user/7_s09.png"
+   ],
+   "8": [
+    "digits/user/8_s00.png",
+    "digits/user/8_s01.png",
+    "digits/user/8_s02.png",
+    "digits/user/8_s03.png",
+    "digits/user/8_s04.png",
+    "digits/user/8_s05.png",
+    "digits/user/8_s06.png",
+    "digits/user/8_s07.png",
+    "digits/user/8_s08.png",
+    "digits/user/8_s09.png"
+   ],
+   "9": [
+    "digits/user/9_s00.png",
+    "digits/user/9_s01.png",
+    "digits/user/9_s02.png",
+    "digits/user/9_s03.png",
+    "digits/user/9_s04.png",
+    "digits/user/9_s05.png",
+    "digits/user/9_s06.png",
+    "digits/user/9_s07.png",
+    "digits/user/9_s08.png",
+    "digits/user/9_s09.png"
+   ]
+  }
+ },
+ "paper": "paper.png",
+ "copyright": "(c) 2026 Bernardo Cohen / deLaPatada Software - a-souvenir-of-sudokus. Handwriting of el abuelo. All rights reserved; not licensed for reuse."
+}

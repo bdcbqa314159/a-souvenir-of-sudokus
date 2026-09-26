@@ -441,8 +441,10 @@ fn App() -> impl IntoView {
     // dev mode (?dev in the URL): assists uncapped — the debugging use survives
     let dev = window().location().search().unwrap_or_default().contains("dev");
     let flip_anim = RwSignal::new(false);
-    // classic/souvenir toggle: shown only when the souvenir pack exists
+    // classic/souvenir toggle: shown only when a souvenir pack exists;
+    // remembers WHICH one loaded (abuelo or grandpere) as the toggle target
     let has_souvenir = RwSignal::new(false);
+    let souvenir_pack: RwSignal<String> = RwSignal::new("assets/grandpere".into());
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -454,7 +456,13 @@ fn App() -> impl IntoView {
         }
         let candidates = match url_pack() {
             Some(p) => vec![p],
-            None => vec!["assets/grandpere".into(), "assets/placeholder".into()],
+            // abuelo (real scans, family builds from the main machine) wins
+            // over grandpere (generated pack, committed to the public repo)
+            None => vec![
+                "assets/abuelo".into(),
+                "assets/grandpere".into(),
+                "assets/placeholder".into(),
+            ],
         };
         let mut loaded = false;
         for cand in candidates {
@@ -466,7 +474,10 @@ fn App() -> impl IntoView {
         if !loaded {
             msg.set(t(lang.get_untracked()).no_pack.into());
         }
-        has_souvenir.set(pack() == "assets/grandpere");
+        if pack() != "assets/placeholder" {
+            souvenir_pack.set(pack());
+            has_souvenir.set(true);
+        }
         let rsp = cmd(json!({"cmd": "new", "difficulty": "medium"}));
         if rsp["ok"].as_bool() == Some(true) {
             game.set(Some(rsp["game"].clone()));
@@ -985,12 +996,16 @@ fn App() -> impl IntoView {
                 {move || t(lang.get()).phantom}
             </button>
             {move || has_souvenir.get().then(|| {
-                let on_souvenir = move || pack() == "assets/grandpere";
+                let on_souvenir = move || pack() != "assets/placeholder";
                 view! {
                     <button on:click=move |_| {
-                        let target = if on_souvenir() { "assets/placeholder" } else { "assets/grandpere" };
+                        let target = if on_souvenir() {
+                            "assets/placeholder".to_string()
+                        } else {
+                            souvenir_pack.get_untracked()
+                        };
                         spawn_local(async move {
-                            load_pack(target.into(), manifest).await;
+                            load_pack(target, manifest).await;
                         });
                     }>
                         {move || {

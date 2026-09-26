@@ -13,10 +13,12 @@ wasm (pinned emsdk 3.1.64, cloned on first run), then `cargo tauri build`
 
 ## Before the first build on a new machine
 
-1. **Copy the pack**: `web/assets/grandpere/` is gitignored (it never enters
-   git). Bring it over by USB/scp from the main machine into the same path.
-2. Install the per-OS prerequisites below.
-3. `gh auth login` if you'll upload release binaries from that machine.
+1. Install the per-OS prerequisites below. The public pack (generated
+   typeface + synthetic paper) is committed to the repo — a bare clone
+   builds the full game. (The real-scan family pack lives only in
+   `web/assets/abuelo/` on the main machine, gitignored; builds made there
+   automatically prefer it.)
+2. `gh auth login` if you'll upload release binaries from that machine.
 
 ## Prerequisites
 
