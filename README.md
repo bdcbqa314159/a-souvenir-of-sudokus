@@ -7,6 +7,33 @@ with a JSON game-state contract; frontends are thin layers on top — the CLI
 The final rendering will be built from photographs of the original handwritten
 grids this game is named after.
 
+## Install on Windows · Installer sous Windows · Instalar en Windows
+
+> One file, click and play. Windows 10/11 already include everything it needs
+> (WebView2) — nothing else to install.
+> Un seul fichier, cliquez et jouez. Windows 10/11 contient déjà tout le
+> nécessaire (WebView2) — rien d'autre à installer.
+> Un solo archivo, haz clic y juega. Windows 10/11 ya incluye todo lo
+> necesario (WebView2) — no hay que instalar nada más.
+
+**English**
+1. Download **`a-souvenir-of-sudokus_<version>_x64-setup.exe`** from the Releases page.
+2. Double-click it. If Windows shows *"Windows protected your PC"*, click **More info → Run anyway** — the app is safe, it just isn't code-signed.
+3. It installs for your account only (no administrator rights needed) and adds a Start-menu and desktop shortcut.
+4. Open it from the shortcut and play. To remove it later: *Settings → Apps → Installed apps*.
+
+**Français**
+1. Téléchargez **`a-souvenir-of-sudokus_<version>_x64-setup.exe`** depuis la page Releases.
+2. Double-cliquez dessus. Si Windows affiche « *Windows a protégé votre ordinateur* », cliquez sur **Informations complémentaires → Exécuter quand même** — l'application est sûre, elle n'est simplement pas signée.
+3. Elle s'installe uniquement pour votre compte (sans droits administrateur) et ajoute un raccourci dans le menu Démarrer et sur le bureau.
+4. Ouvrez-la depuis le raccourci et jouez. Pour la désinstaller : *Paramètres → Applications → Applications installées*.
+
+**Español**
+1. Descarga **`a-souvenir-of-sudokus_<version>_x64-setup.exe`** desde la página de Releases.
+2. Haz doble clic. Si Windows muestra «*Windows protegió su PC*», haz clic en **Más información → Ejecutar de todas formas** — la aplicación es segura, solo que no está firmada.
+3. Se instala solo para tu usuario (sin permisos de administrador) y añade un acceso directo en el menú Inicio y en el escritorio.
+4. Ábrela desde el acceso directo y juega. Para desinstalarla: *Configuración → Aplicaciones → Aplicaciones instaladas*.
+
 ## Play
 
 Build the engine module once, then play:
