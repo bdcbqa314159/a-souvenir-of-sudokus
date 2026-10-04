@@ -14,14 +14,25 @@
     window.souvenir_cmd = mod.cwrap("souvenir_cmd", "string", ["string"]);
   </script>
   <style>
-    :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a; }
+    :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a; --cell: 3.2rem; }
     body { background: var(--paper); color: var(--ink); font-family: Georgia, serif;
            display: flex; flex-direction: column; align-items: center; margin: 1.2rem; }
     h1 { font-size: 1.1rem; font-weight: normal; letter-spacing: 0.12em; margin: 0 0 0.8rem; }
-    .grid { display: grid; grid-template-columns: repeat(9, 3.2rem); border: 2px solid var(--red); }
-    .cell { width: 3.2rem; height: 3.2rem; border: 1px solid var(--red);
+    /* phone fit: cells shrink with the viewport so the 9x9 always fits portrait */
+    @media (max-width: 520px) {
+      :root { --cell: calc((100vw - 1.4rem) / 9); }
+      body { margin: 0.5rem; }
+      h1 { font-size: 0.9rem; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+    }
+    .grid { display: grid; grid-template-columns: repeat(9, var(--cell)); border: 2px solid var(--red); }
+    .cell { width: var(--cell); height: var(--cell); border: 1px solid var(--red);
             display: flex; align-items: center; justify-content: center;
             position: relative; cursor: pointer; box-sizing: border-box; }
+    /* touch hygiene: taps act immediately (no dbl-tap zoom), always hit the
+       cell (not the glyph <img>), and never pop the save-image sheet */
+    .grid, button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .grid { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    .cell img, button.digit img { pointer-events: none; }
     /* the tic-tac-toe cross, black over the red minor lines — as in the originals */
     .cross-r { border-right: 2px solid var(--ink); }
     .cross-b { border-bottom: 2px solid var(--ink); }
@@ -40,10 +51,12 @@
       40%  { opacity: 0.12; filter: blur(3px); }
       100% { opacity: 1; filter: none; }
     }
-    .marks img { width: 0.85rem; height: 0.85rem; opacity: 0.75; }
+    .marks img { width: calc(var(--cell) * 0.27); height: calc(var(--cell) * 0.27); opacity: 0.75; }
     .bar { margin-top: 0.55rem; display: flex; gap: 0.45rem; flex-wrap: wrap;
-           justify-content: center; align-items: center; }
+           justify-content: center; align-items: center; max-width: calc(var(--cell) * 9 + 4px); }
     .bar.palette { margin-top: 1rem; gap: 0.3rem; }
+    /* digit buttons keep >=43px tap targets; on narrow screens they wrap 5+5
+       rather than shrinking below a comfortable touch size */
     button { font-family: inherit; background: none; border: 1px solid var(--ink);
              padding: 0.25rem 0.7rem; cursor: pointer; }
     button.on { background: var(--ink); color: var(--paper); }
