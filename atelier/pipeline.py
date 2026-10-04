@@ -386,6 +386,27 @@ def harmonize_ink(rgba, role):
     return rgba
 
 
+def write_sprite(pack_dir, manifest):
+    """All glyphs composed into one spritesheet: the board paints from ONE
+    request instead of 180 (the per-file pack stays, as fallback and for
+    anything that wants single glyphs). Indexed by the same rel paths the
+    digits lists use; stamped + watermarked like any asset."""
+    refs = [p for role in manifest["digits"].values() for v in role.values() for p in v]
+    if not refs:
+        return
+    cols = 15
+    rows = (len(refs) + cols - 1) // cols
+    sheet = np.zeros((rows * GLYPH, cols * GLYPH, 4), np.uint8)
+    index = {}
+    for i, rel in enumerate(refs):
+        img = cv2.imread(str(pack_dir / rel), cv2.IMREAD_UNCHANGED)
+        r, c = divmod(i, cols)
+        sheet[r * GLYPH : (r + 1) * GLYPH, c * GLYPH : (c + 1) * GLYPH] = img
+        index[rel] = i
+    save_png(pack_dir / "sprite.png", sheet)
+    manifest["sprite"] = {"file": "sprite.png", "cols": cols, "rows": rows, "index": index}
+
+
 def pack_rev(pack_dir, manifest):
     """Content hash over every referenced asset -> manifest["rev"]. The web
     appends ?v=<rev> to asset URLs, so browsers drop stale cached glyphs the
@@ -396,6 +417,8 @@ def pack_rev(pack_dir, manifest):
     refs = sorted(p for role in manifest["digits"].values() for v in role.values() for p in v)
     if manifest.get("paper"):
         refs.append(manifest["paper"])
+    if manifest.get("sprite"):
+        refs.append(manifest["sprite"]["file"])
     for rel in refs:
         h.update((pack_dir / rel).read_bytes())
     manifest["rev"] = h.hexdigest()[:10]
@@ -452,6 +475,7 @@ def stage_emit(max_variants=10):
         shutil.copy(real_paper, ABUELO / "paper.png")
         manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
+    write_sprite(ABUELO, manifest)
     pack_rev(ABUELO, manifest)
     (ABUELO / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
@@ -693,6 +717,7 @@ def stage_synth(per_class=10, seed=7, targets=None):
     if (out_pack / "paper.png").exists():
         manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
+    write_sprite(out_pack, manifest)
     pack_rev(out_pack, manifest)
     (out_pack / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())

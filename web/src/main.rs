@@ -46,6 +46,16 @@ fn versioned(url: String) -> String {
     if rev.is_empty() { url } else { format!("{url}?v={rev}") }
 }
 
+/// Spritesheet of the loaded pack: (file, cols, rows, rel-path -> tile index).
+/// One request paints the whole board; packs without one (placeholder) fall
+/// back to per-file URLs.
+type Sprite = (String, u32, u32, HashMap<String, u32>);
+
+fn sprite_store() -> &'static std::sync::Mutex<Option<Sprite>> {
+    static SPRITE: std::sync::Mutex<Option<Sprite>> = std::sync::Mutex::new(None);
+    &SPRITE
+}
+
 /// Fetch a pack's manifest, install it (pack path, paper, digit manifest).
 /// Used at startup and by the classic/souvenir toggle.
 async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
@@ -61,6 +71,15 @@ async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
     };
     *pack_store().lock().unwrap() = Some(cand.clone());
     *rev_store().lock().unwrap() = m["rev"].as_str().unwrap_or_default().to_string();
+    *sprite_store().lock().unwrap() = (|| {
+        let s = &m["sprite"];
+        let index = s["index"]
+            .as_object()?
+            .iter()
+            .filter_map(|(k, v)| Some((k.clone(), v.as_u64()? as u32)))
+            .collect();
+        Some((s["file"].as_str()?.to_string(), s["cols"].as_u64()? as u32, s["rows"].as_u64()? as u32, index))
+    })();
     // a pack may bring its own paper — the page becomes his notebook;
     // a paperless pack (classic) falls back to the plain CSS cream
     if let Some(body) = document().body() {
@@ -411,13 +430,30 @@ fn solved_game(game: &Value) -> bool {
 }
 
 /// Deterministic variant per (cell, digit): the page looks written, not stamped.
-fn digit_src(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> Option<String> {
+/// Inline background style for one glyph: spritesheet position when the pack
+/// has one (one request paints everything), per-file URL otherwise.
+fn digit_style(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> Option<String> {
     let variants = manifest.get(role)?.get(&digit.to_string())?;
     if variants.is_empty() {
         return None; // a sparse pack must degrade, not divide by zero
     }
     let v = variants.get((cell * 31 + digit as usize) % variants.len())?;
-    Some(versioned(format!("{}/{v}", pack())))
+    let sprite = sprite_store().lock().unwrap().clone();
+    if let Some((file, cols, rows, index)) = sprite {
+        if let Some(&n) = index.get(v) {
+            let (c, r) = (n % cols, n / cols);
+            let px = if cols > 1 { c as f64 * 100.0 / (cols - 1) as f64 } else { 0.0 };
+            let py = if rows > 1 { r as f64 * 100.0 / (rows - 1) as f64 } else { 0.0 };
+            let url = versioned(format!("{}/{file}", pack()));
+            return Some(format!(
+                "background-image:url('{url}');background-size:{}% {}%;background-position:{px:.4}% {py:.4}%",
+                cols * 100,
+                rows * 100
+            ));
+        }
+    }
+    let url = versioned(format!("{}/{v}", pack()));
+    Some(format!("background-image:url('{url}');background-size:contain;background-position:center"))
 }
 
 #[derive(Clone, Default)]
@@ -883,24 +919,24 @@ fn App() -> impl IntoView {
                     class.push_str(" same");
                 }
                 let value_img = (v != 0)
-                    .then(|| digit_src(&man, role, v, i))
+                    .then(|| digit_style(&man, role, v, i))
                     .flatten()
-                    .map(|src| view! { <img class="value" src=src /> });
+                    .map(|style| view! { <div class="value glyph" style=style></div> });
                 let ghost_img = ghost.as_ref().and_then(|(inc_puzzle, opacity)| {
                     let gv = inc_puzzle[i];
                     (gv != 0)
-                        .then(|| digit_src(&man, "given", gv, i))
+                        .then(|| digit_style(&man, "given", gv, i))
                         .flatten()
-                        .map(|src| {
-                            view! { <img class="ghost" src=src style=format!("opacity:{opacity:.2}") /> }
+                        .map(|style| {
+                            view! { <div class="ghost glyph" style=format!("{style};opacity:{opacity:.2}")></div> }
                         })
                 });
                 let mark_imgs = (v == 0)
                     .then(|| {
                         marks[i]
                             .iter()
-                            .filter_map(|d| digit_src(&man, "user", *d, i))
-                            .map(|src| view! { <img src=src /> })
+                            .filter_map(|d| digit_style(&man, "user", *d, i))
+                            .map(|style| view! { <div class="glyph" style=style></div> })
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
@@ -974,11 +1010,11 @@ fn App() -> impl IntoView {
             (1..=9usize)
                 .map(|d| {
                     let done = placed[d - 1] >= 9;
-                    let src = digit_src(&man, "user", d as i64, d * 7);
+                    let style = digit_style(&man, "user", d as i64, d * 7);
                     view! {
                         <button class="digit" class:done=move || done
                             on:click=move |_| key_action(DIGIT_KEYS[d - 1])>
-                            {src.map(|s| view! { <img src=s /> })}
+                            {style.map(|s| view! { <div class="glyph" style=s></div> })}
                         </button>
                     }
                 })
