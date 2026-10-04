@@ -386,6 +386,21 @@ def harmonize_ink(rgba, role):
     return rgba
 
 
+def pack_rev(pack_dir, manifest):
+    """Content hash over every referenced asset -> manifest["rev"]. The web
+    appends ?v=<rev> to asset URLs, so browsers drop stale cached glyphs the
+    moment a regenerated pack deploys (filenames alone don't change)."""
+    import hashlib
+
+    h = hashlib.sha256()
+    refs = sorted(p for role in manifest["digits"].values() for v in role.values() for p in v)
+    if manifest.get("paper"):
+        refs.append(manifest["paper"])
+    for rel in refs:
+        h.update((pack_dir / rel).read_bytes())
+    manifest["rev"] = h.hexdigest()[:10]
+
+
 def stage_emit(max_variants=10):
     """Real-scan family pack -> web/assets/abuelo/ (gitignored; NEVER commit).
     The public repo carries only the generated pack (synth/genpaper -> PACK)."""
@@ -437,6 +452,7 @@ def stage_emit(max_variants=10):
         shutil.copy(real_paper, ABUELO / "paper.png")
         manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
+    pack_rev(ABUELO, manifest)
     (ABUELO / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
     print(f"emitted {total} glyphs -> {ABUELO}/manifest.json")
@@ -677,6 +693,7 @@ def stage_synth(per_class=10, seed=7, targets=None):
     if (out_pack / "paper.png").exists():
         manifest["paper"] = "paper.png"
     manifest["copyright"] = STAMP
+    pack_rev(out_pack, manifest)
     (out_pack / "manifest.json").write_text(json.dumps(manifest, indent=1))
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
     print(f"synthesized {total} glyphs -> {out_pack}/manifest.json")
