@@ -51,7 +51,14 @@ with respect.
   ("failed to read asset"): run the build script again — it retries once,
   occasionally needs a second invocation.
 - The browser caches glyphs by filename: after regenerating assets, HARD
-  refresh (Cmd+Shift+R).
+  refresh (Cmd+Shift+R; Ctrl+Shift+R on Windows).
+- Windows: run `build-desktop.sh` in Git Bash. The script self-configures PATH
+  (rustup's cargo and MSVC's `link.exe` ahead of the standalone Rust and Git's
+  coreutils `link`) and re-activates a half-cloned `.emsdk`. Two prereqs it
+  does NOT fix: the VS "Desktop C++" env must be loaded (LIB/INCLUDE set), and
+  `python3` must run real Python — if it's the Microsoft Store alias the build
+  stops early with the fix (copy `python.exe`→`python3.exe`, or disable the
+  alias). Atelier venv path is `.venv/Scripts/python` (not `bin/`).
 - `meta.csv` semantics: label `-1` = human-rejected exemplar; `pin` marks
   blend anchors — pins steer the generator (pinned exemplars are the only
   anchors for their digit). `SYNTH_TUNE` in pipeline.py holds per-digit

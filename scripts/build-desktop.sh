@@ -5,6 +5,29 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Windows (Git Bash): rustup's cargo is shadowed by a standalone Rust install,
+# and Git's coreutils link.exe shadows MSVC's. Put both where the build expects.
+# (Assumes the VS "Desktop C++" env is already loaded — LIB/INCLUDE set.)
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)
+  export PATH="$HOME/.cargo/bin:$PATH"
+  vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+  if [ -x "$vswhere" ]; then
+    vs=$("$vswhere" -latest -property installationPath)
+    msvc=$(ls -d "$(cygpath -u "$vs")"/VC/Tools/MSVC/*/bin/HostX64/x64 2>/dev/null | tail -1 || true)
+    [ -n "$msvc" ] && export PATH="$msvc:$PATH"
+  fi
+;; esac
+
+# the build (and emsdk) need a real python3. On Windows 'python3' is often the
+# Microsoft Store alias stub, not Python — catch it here with a clear message.
+case "$(python3 --version 2>&1)" in
+  "Python "[0-9]*) :;;
+  *) echo "FATAL: 'python3' does not run real Python (Microsoft Store alias, or missing)." >&2
+     echo "       Windows fix: copy python.exe -> python3.exe in your Python dir, or disable the" >&2
+     echo "       'python3' App Execution Alias (Settings > Apps > Advanced > App execution aliases)." >&2
+     exit 1;;
+esac
+
 # privacy first: strip personal paths from anything we might distribute
 [ -f .cargo/config.toml ] || ./scripts/scrub-paths.sh
 
@@ -51,8 +74,8 @@ fi
 if [ ! -d .emsdk ]; then
   git clone --depth 1 https://github.com/emscripten-core/emsdk.git .emsdk
   ./.emsdk/emsdk install 3.1.64
-  ./.emsdk/emsdk activate 3.1.64
 fi
+./.emsdk/emsdk activate 3.1.64  # idempotent; also repairs a half-cloned .emsdk
 source ./.emsdk/emsdk_env.sh
 emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
 cmake --build engine/build/wasm -j
