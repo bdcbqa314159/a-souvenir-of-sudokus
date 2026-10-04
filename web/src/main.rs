@@ -33,6 +33,19 @@ fn pack() -> String {
     pack_store().lock().unwrap().clone().unwrap_or_else(|| "assets/placeholder".into())
 }
 
+/// Content revision of the loaded pack (manifest "rev"). Appended as ?v= to
+/// asset URLs: glyph FILENAMES never change across regenerations, so without
+/// this a returning browser keeps serving stale cached glyphs after a deploy.
+fn rev_store() -> &'static std::sync::Mutex<String> {
+    static REV: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+    &REV
+}
+
+fn versioned(url: String) -> String {
+    let rev = rev_store().lock().unwrap().clone();
+    if rev.is_empty() { url } else { format!("{url}?v={rev}") }
+}
+
 /// Fetch a pack's manifest, install it (pack path, paper, digit manifest).
 /// Used at startup and by the classic/souvenir toggle.
 async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
@@ -47,12 +60,14 @@ async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
         return false;
     };
     *pack_store().lock().unwrap() = Some(cand.clone());
+    *rev_store().lock().unwrap() = m["rev"].as_str().unwrap_or_default().to_string();
     // a pack may bring its own paper — the page becomes his notebook;
     // a paperless pack (classic) falls back to the plain CSS cream
     if let Some(body) = document().body() {
         let style = body.style();
         if let Some(paper) = m["paper"].as_str() {
-            let _ = style.set_property("background-image", &format!("url('{cand}/{paper}')"));
+            let paper_url = versioned(format!("{cand}/{paper}"));
+            let _ = style.set_property("background-image", &format!("url('{paper_url}')"));
             let _ = style.set_property("background-size", "540px");
         } else {
             let _ = style.remove_property("background-image");
@@ -306,6 +321,29 @@ fn detect_lang() -> Lang {
     }
 }
 
+/// Session persistence: a refresh resumes the game in progress; only a new
+/// game (or solving it) clears the slot. The engine is stateless — the game
+/// JSON on the wire IS the save format, so restoring is just handing it back.
+const SESSION_KEY: &str = "souvenir-session";
+
+fn save_session(blob: &Value) {
+    if let Ok(Some(store)) = window().local_storage() {
+        let _ = store.set_item(SESSION_KEY, &blob.to_string());
+    }
+}
+
+fn clear_session() {
+    if let Ok(Some(store)) = window().local_storage() {
+        let _ = store.remove_item(SESSION_KEY);
+    }
+}
+
+fn load_session() -> Option<Value> {
+    let store = window().local_storage().ok()??;
+    let raw = store.get_item(SESSION_KEY).ok()??;
+    serde_json::from_str(&raw).ok()
+}
+
 fn save_lang(lang: Lang) {
     if let Ok(Some(store)) = window().local_storage() {
         let _ = store.set_item(
@@ -379,7 +417,7 @@ fn digit_src(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> Option
         return None; // a sparse pack must degrade, not divide by zero
     }
     let v = variants.get((cell * 31 + digit as usize) % variants.len())?;
-    Some(format!("{}/{v}", pack()))
+    Some(versioned(format!("{}/{v}", pack())))
 }
 
 #[derive(Clone, Default)]
@@ -445,6 +483,8 @@ fn App() -> impl IntoView {
     // remembers WHICH one loaded (abuelo or grandpere) as the toggle target
     let has_souvenir = RwSignal::new(false);
     let souvenir_pack: RwSignal<String> = RwSignal::new("assets/grandpere".into());
+    // autosave arms only after restore has had its chance (see Effect below)
+    let session_ready = RwSignal::new(false);
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -478,11 +518,55 @@ fn App() -> impl IntoView {
             souvenir_pack.set(pack());
             has_souvenir.set(true);
         }
-        let rsp = cmd(json!({"cmd": "new", "difficulty": "medium"}));
-        if rsp["ok"].as_bool() == Some(true) {
-            game.set(Some(rsp["game"].clone()));
-        } else {
-            msg.set(rsp["error"].as_str().unwrap_or("engine error").to_string());
+        // refresh resumes: restore the saved session if the engine accepts
+        // its game state (localStorage is user-editable — garbage falls
+        // through to a fresh game, silently)
+        let restored = load_session().is_some_and(|s| {
+            let g = s["game"].clone();
+            if cmd(json!({"cmd": "check", "game": g}))["ok"].as_bool() != Some(true) {
+                return false;
+            }
+            game.set(Some(s["game"].clone()));
+            hints_left.set(s["hints"].as_u64().map(|v| v as u32).unwrap_or(HINTS).min(HINTS));
+            checks_left.set(s["checks"].as_u64().map(|v| v as u32).unwrap_or(CHECKS).min(CHECKS));
+            ph.lives.set(s["lives"].as_u64().map(|v| v as u32).unwrap_or(LIVES).min(LIVES));
+            ph.over.set(s["over"].as_bool().unwrap_or(false));
+            if s["mode"] == "phantom" {
+                mode.set(Mode::Phantom);
+                // re-anchor the stall clock: the pact resumes from NOW, a
+                // refresh must never hand the phantom an expired timer
+                ph.last_progress.set(js_sys::Date::now());
+                ph.clear_haunt();
+            }
+            true
+        });
+        if !restored {
+            let rsp = cmd(json!({"cmd": "new", "difficulty": "medium"}));
+            if rsp["ok"].as_bool() == Some(true) {
+                game.set(Some(rsp["game"].clone()));
+            } else {
+                msg.set(rsp["error"].as_str().unwrap_or("engine error").to_string());
+            }
+        }
+        session_ready.set(true);
+    });
+
+    // autosave: any change to the session-relevant signals writes the slot.
+    // Gated on session_ready so the pre-restore defaults never clobber a
+    // saved session during startup.
+    Effect::new(move |_| {
+        let Some(g) = game.get() else { return };
+        let m = mode.get();
+        let blob = json!({
+            "game": g,
+            "mode": if m == Mode::Phantom { "phantom" } else { "classic" },
+            "lives": ph.lives.get(),
+            "over": ph.over.get(),
+            "hints": hints_left.get(),
+            "checks": checks_left.get(),
+        });
+        if session_ready.get_untracked() {
+            save_session(&blob);
         }
     });
 
@@ -572,6 +656,7 @@ fn App() -> impl IntoView {
             game.set(Some(rsp["game"].clone()));
             if rsp["solved"].as_bool() == Some(true) {
                 msg.set(t(lang.get_untracked()).solved.into());
+                clear_session(); // a solved game is not worth resuming
             }
             true
         } else {
