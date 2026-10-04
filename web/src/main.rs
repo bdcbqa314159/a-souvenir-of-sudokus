@@ -51,6 +51,17 @@ fn versioned(url: String) -> String {
 /// back to per-file URLs.
 type Sprite = (String, u32, u32, HashMap<String, u32>);
 
+/// Versioned URL of the loaded pack's paper, for the splash preloader.
+fn paper_store() -> &'static std::sync::Mutex<Option<String>> {
+    static PAPER: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+    &PAPER
+}
+
+fn sprite_url() -> Option<String> {
+    let (file, ..) = sprite_store().lock().unwrap().clone()?;
+    Some(versioned(format!("{}/{file}", pack())))
+}
+
 fn sprite_store() -> &'static std::sync::Mutex<Option<Sprite>> {
     static SPRITE: std::sync::Mutex<Option<Sprite>> = std::sync::Mutex::new(None);
     &SPRITE
@@ -86,9 +97,11 @@ async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
         let style = body.style();
         if let Some(paper) = m["paper"].as_str() {
             let paper_url = versioned(format!("{cand}/{paper}"));
+            *paper_store().lock().unwrap() = Some(paper_url.clone());
             let _ = style.set_property("background-image", &format!("url('{paper_url}')"));
             let _ = style.set_property("background-size", "540px");
         } else {
+            *paper_store().lock().unwrap() = None;
             let _ = style.remove_property("background-image");
         }
     }
@@ -521,6 +534,12 @@ fn App() -> impl IntoView {
     let souvenir_pack: RwSignal<String> = RwSignal::new("assets/grandpere".into());
     // autosave arms only after restore has had its chance (see Effect below)
     let session_ready = RwSignal::new(false);
+    // composed reveal: a splash covers the page until the engine, the game,
+    // the paper AND the sprite are all ready — then one fade shows the
+    // finished board. Loading never performs its scatter in public.
+    let paper_ok = RwSignal::new(false);
+    let sprite_ok = RwSignal::new(false);
+    let preload: RwSignal<(Option<String>, Option<String>)> = RwSignal::new((None, None));
 
     // engine ready (index.html sets window.souvenir_cmd) + manifest fetched -> first game
     spawn_local(async move {
@@ -554,6 +573,14 @@ fn App() -> impl IntoView {
             souvenir_pack.set(pack());
             has_souvenir.set(true);
         }
+        let (p_url, s_url) = (paper_store().lock().unwrap().clone(), sprite_url());
+        if p_url.is_none() {
+            paper_ok.set(true); // nothing to wait for
+        }
+        if s_url.is_none() {
+            sprite_ok.set(true);
+        }
+        preload.set((p_url, s_url));
         // refresh resumes: restore the saved session if the engine accepts
         // its game state (localStorage is user-editable — garbage falls
         // through to a fresh game, silently)
@@ -1052,7 +1079,25 @@ fn App() -> impl IntoView {
     let current_diff =
         move || game.get().and_then(|g| g["difficulty"].as_str().map(String::from)).unwrap_or_default();
 
+    let ready = move || game.get().is_some() && paper_ok.get() && sprite_ok.get();
+
     view! {
+        <div class="splash" class:hidden=ready>
+            <h1>"a-souvenir-of-sudokus"</h1>
+            <div class="dots">"· · ·"</div>
+        </div>
+        {move || {
+            let (p, s) = preload.get();
+            view! {
+                {p.map(|u| view! { <img class="preload" src=u
+                    on:load=move |_| paper_ok.set(true)
+                    on:error=move |_| paper_ok.set(true) /> })}
+                {s.map(|u| view! { <img class="preload" src=u
+                    on:load=move |_| sprite_ok.set(true)
+                    on:error=move |_| sprite_ok.set(true) /> })}
+            }
+        }}
+        <div class="app" class:ready=ready>
         <h1>"a-souvenir-of-sudokus"</h1>
         <div class="grid" class:flipping=move || flip_anim.get()>{cells}</div>
         <div class="bar palette">
@@ -1158,6 +1203,7 @@ fn App() -> impl IntoView {
         </div>
         <div class="msg" class:solved=solved>{move || msg.get()}</div>
         <div class="status">{status}</div>
+        </div>
     }
 }
 
