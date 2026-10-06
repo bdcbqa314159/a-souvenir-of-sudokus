@@ -400,6 +400,11 @@ def write_sprite(pack_dir, manifest):
     index = {}
     for i, rel in enumerate(refs):
         img = cv2.imread(str(pack_dir / rel), cv2.IMREAD_UNCHANGED)
+        if img is None or img.shape != (GLYPH, GLYPH, 4):
+            sys.exit(
+                f"sprite: missing or malformed glyph '{rel}' — the pack is inconsistent "
+                "(a frozen manifest row references a file that is gone; run a full synth/emit)"
+            )
         r, c = divmod(i, cols)
         sheet[r * GLYPH : (r + 1) * GLYPH, c * GLYPH : (c + 1) * GLYPH] = img
         index[rel] = i
@@ -420,8 +425,23 @@ def pack_rev(pack_dir, manifest):
     if manifest.get("sprite"):
         refs.append(manifest["sprite"]["file"])
     for rel in refs:
-        h.update((pack_dir / rel).read_bytes())
+        data = (pack_dir / rel).read_bytes()
+        # path + length delimiters: concatenation alone is boundary-ambiguous
+        h.update(rel.encode())
+        h.update(len(data).to_bytes(8, "big"))
+        h.update(data)
     manifest["rev"] = h.hexdigest()[:10]
+
+
+def write_manifest(pack_dir, manifest):
+    """Atomic manifest write (tmp + rename): a crash between asset writes and
+    the manifest left packs serving a stale sprite + stale rev, silently."""
+    import os
+
+    p = pack_dir / "manifest.json"
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(manifest, indent=1))
+    os.replace(tmp, p)
 
 
 def stage_emit(max_variants=10):
@@ -477,7 +497,7 @@ def stage_emit(max_variants=10):
     manifest["copyright"] = STAMP
     write_sprite(ABUELO, manifest)
     pack_rev(ABUELO, manifest)
-    (ABUELO / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    write_manifest(ABUELO, manifest)
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
     print(f"emitted {total} glyphs -> {ABUELO}/manifest.json")
 
@@ -490,33 +510,68 @@ STAMP = (
 )
 
 
-def wm_key():
+def wm_key(create=False):
     """Secret watermark key — lives in gitignored atelier-work, never in git.
-    Losing it means old marks can't be verified: back it up with the photos."""
+    Losing it means old marks can't be verified: back it up with the photos.
+    NOTHING mints a key as a side effect (audit: genpaper on a fresh clone
+    used to silently mark public assets under a junk key nobody holds) —
+    creation happens only through `pipeline.py genkey`."""
     kp = WORK / "wm.key"
     if not kp.exists():
+        if not create:
+            sys.exit(
+                f"no watermark key at {kp} — run 'pipeline.py genkey' (key holder's machine) "
+                "or restore the backup before marking/verifying"
+            )
         import secrets
 
         kp.parent.mkdir(parents=True, exist_ok=True)
         kp.write_bytes(secrets.token_bytes(32))
-    return kp.read_bytes()
+        kp.chmod(0o600)
+    key = kp.read_bytes()
+    if len(key) != 32:
+        sys.exit(f"corrupt watermark key at {kp}: {len(key)} bytes, want 32 — restore the backup")
+    if kp.stat().st_mode & 0o077:
+        kp.chmod(0o600)
+    return key
+
+
+def stage_genkey():
+    kp = WORK / "wm.key"
+    if kp.exists():
+        sys.exit(f"refusing to overwrite the existing key at {kp}")
+    import hashlib
+
+    key = wm_key(create=True)
+    print(f"new key at {kp} (id {hashlib.sha256(key).hexdigest()[:8]}) — BACK IT UP with the photos")
+
+
+WM_MAGIC = b"ASWM2"
 
 
 def watermark(img):
-    """Proof-grade provenance mark, invisible: all pixel LSBs are zeroed, then
-    the first LSBs carry [len | STAMP | HMAC(secret key, zeroed pixels)]. On a
-    bit-identical rip, only the key holder can demonstrate authorship and no
-    one can forge the mark (`pipeline.py verify <file>`).
-    ponytail: survives file copies (the realistic rip), not re-encode/resize —
-    DCT spread-spectrum watermarking if that ever matters."""
+    """Invisible provenance mark (v2, post-audit): every pixel LSB is zeroed,
+    then the head LSBs carry [2B len | ASWM2 | 4B key-id | STAMP | 16B HMAC].
+    The HMAC covers the zeroed pixels AND the length AND the payload — the
+    v1 mark authenticated only the pixels, so anyone could rewrite the stamp
+    text and keep the tag (audit finding #1). Beyond the mark the LSB plane
+    is all zeros by construction, and verify enforces that, so stray hidden
+    data also fails (#2).
+    Honest ceiling: HMAC is symmetric — demonstrating the mark to a third
+    party means disclosing the key, which then enables forgery; and the mark
+    proves linkage to the key, not precedence. If public verification ever
+    matters (stores, disputes), switch to Ed25519 signatures. Survives file
+    copies, not re-encode/resize."""
     import hashlib
     import hmac
 
+    key = wm_key()
     flat = img.reshape(-1).copy()
     flat &= 0xFE
-    mac = hmac.new(wm_key(), flat.tobytes(), hashlib.sha256).digest()[:16]
-    msg = STAMP.encode() + mac
-    bits = np.unpackbits(np.frombuffer(len(msg).to_bytes(2, "big") + msg, np.uint8))
+    payload = WM_MAGIC + hashlib.sha256(key).digest()[:4] + STAMP.encode()
+    len_bytes = (len(payload) + 16).to_bytes(2, "big")
+    mac = hmac.new(key, flat.tobytes() + len_bytes + payload, hashlib.sha256).digest()[:16]
+    bits = np.unpackbits(np.frombuffer(len_bytes + payload + mac, np.uint8))
     if bits.size > flat.size:
         sys.exit("image too small to watermark")
     flat[: bits.size] |= bits
@@ -632,6 +687,13 @@ def stage_synth(per_class=10, seed=7, targets=None):
                         pinned_idx.append(len(pool))
                     pool.append(m)
             if len(pool) < 2:
+                # a thin pool must not silently drop the row (and orphan its
+                # files): keep the previous entry on targeted runs, warn loud
+                if targets is not None and old_man and str(d) in old_man["digits"].get(role, {}):
+                    manifest["digits"][role][str(d)] = old_man["digits"][role][str(d)]
+                    print(f"WARNING: {role} {d}: pool < 2 exemplars — kept the previous row")
+                else:
+                    print(f"WARNING: {role} {d}: pool < 2 exemplars — row DROPPED from the pack")
                 continue
             # runt gate: a blend of fragmented masks can come out shrunken or
             # broken; anything under 60% of the pool's median ink coverage is
@@ -719,7 +781,7 @@ def stage_synth(per_class=10, seed=7, targets=None):
     manifest["copyright"] = STAMP
     write_sprite(out_pack, manifest)
     pack_rev(out_pack, manifest)
-    (out_pack / "manifest.json").write_text(json.dumps(manifest, indent=1))
+    write_manifest(out_pack, manifest)
     total = sum(len(v) for role in manifest["digits"].values() for v in role.values())
     print(f"synthesized {total} glyphs -> {out_pack}/manifest.json")
 
@@ -730,15 +792,50 @@ def stage_verify(path):
 
     from PIL import Image
 
-    flat = np.array(Image.open(path)).reshape(-1)
+    try:
+        img = Image.open(path)
+        img.load()
+    except Exception as e:
+        sys.exit(f"cannot read image '{path}': {e}")
+    arr = np.array(img)
+    if arr.dtype != np.uint8:
+        sys.exit(f"unsupported pixel format ({arr.dtype}) — the mark lives in 8-bit PNGs")
+    key = wm_key()
+    my_id = hashlib.sha256(key).digest()[:4]
+    flat = arr.reshape(-1)
     n = int.from_bytes(np.packbits(flat[:16] & 1).tobytes(), "big")
-    msg = np.packbits(flat[16 : 16 + n * 8] & 1).tobytes()
-    stamp, mac = msg[:-16], msg[-16:]
-    want = hmac.new(wm_key(), (flat & 0xFE).tobytes(), hashlib.sha256).digest()[:16]
-    if hmac.compare_digest(want, mac):
-        print(f"VERIFIED (key holder's mark, pixels untampered): {stamp.decode(errors='replace')}")
-    else:
-        sys.exit(f"NOT VERIFIED — no valid mark for this key. Raw payload: {stamp[:90]!r}")
+    end = 16 + n * 8
+    if n < len(WM_MAGIC) + 4 + 16 + 1 or end > flat.size:
+        sys.exit(f"NOT VERIFIED — no plausible mark in '{path}' (payload length {n} out of range)")
+    msg = np.packbits(flat[16:end] & 1).tobytes()
+    payload, mac = msg[:-16], msg[-16:]
+    if not payload.startswith(WM_MAGIC):
+        sys.exit(f"NOT VERIFIED — no {WM_MAGIC.decode()} mark in '{path}' (unmarked, or a pre-v2 mark)")
+    # the MAC binds pixels, length AND payload — a rewritten stamp can no
+    # longer ride on a genuine tag (audit finding #1)
+    want = hmac.new(key, (flat & 0xFE).tobytes() + n.to_bytes(2, "big") + payload, hashlib.sha256).digest()[:16]
+    key_id, stamp = payload[len(WM_MAGIC) : len(WM_MAGIC) + 4], payload[len(WM_MAGIC) + 4 :]
+    if not hmac.compare_digest(want, mac):
+        if key_id != my_id:
+            sys.exit(
+                f"NOT VERIFIED — mark claims key id {key_id.hex()}, your key is {my_id.hex()}: "
+                "not minted with this key (or payload forged)"
+            )
+        sys.exit("NOT VERIFIED — key matches, but pixels or payload were altered (tampered)")
+    # the whole LSB plane beyond the mark must be zero: hidden extra data
+    # would otherwise verify as 'untampered' (audit finding #2)
+    if (flat[end:] & 1).any():
+        sys.exit("NOT VERIFIED — valid mark, but extra data is hidden in the LSB plane (altered after marking)")
+    # verdict first, on its own line; attacker-influenced bytes only after,
+    # escaped — a crafted stamp once ANSI-overwrote the verdict (finding #3)
+    print(f"VERIFIED — authentic mark of key {my_id.hex()}; pixels, stamp and LSB plane all authenticated")
+    # control chars escaped explicitly: ESC is ASCII, so backslashreplace
+    # alone would pass ANSI sequences straight to the terminal
+    decoded = stamp.decode("utf-8", "replace")
+    safe = "".join(ch if 32 <= ord(ch) < 127 else f"\\x{ord(ch):02x}" for ch in decoded)
+    print("stamp: " + safe)
+    if stamp != STAMP.encode():
+        print("note: stamp text differs from the current STAMP constant (historical mark?)")
 
 
 def save_png(path, img):
@@ -910,7 +1007,18 @@ def stage_genpaper(seed=2026):
     out = np.clip(paper * (1 - ink * 0.9) + line_col * ink * 0.9, 0, 255).astype(np.uint8)
     PACK.mkdir(parents=True, exist_ok=True)
     save_png(PACK / "paper.png", out)
-    print(f"synthetic paper -> {PACK}/paper.png (stamped + watermarked)")
+    # a new paper must bump the rev or returning browsers keep the cached
+    # old one forever (audit finding: this was the 'hard refresh' gotcha)
+    mp = PACK / "manifest.json"
+    if mp.exists():
+        m = json.loads(mp.read_text())
+        m["paper"] = "paper.png"
+        m["copyright"] = STAMP
+        pack_rev(PACK, m)
+        write_manifest(PACK, m)
+        print(f"synthetic paper -> {PACK}/paper.png (stamped + watermarked, rev {m['rev']})")
+    else:
+        print(f"synthetic paper -> {PACK}/paper.png (no manifest yet — run synth to create it)")
 
 
 def stage_pin(args):
@@ -1008,7 +1116,9 @@ if __name__ == "__main__":
     elif stage == "synth":
         stage_synth(targets=sys.argv[2:] or None)
     elif stage == "verify":
-        stage_verify(sys.argv[2])
+        stage_verify(sys.argv[2] if len(sys.argv) > 2 else sys.exit("usage: pipeline.py verify <asset.png>"))
+    elif stage == "genkey":
+        stage_genkey()
     elif stage == "genpaper":
         stage_genpaper()
     elif stage == "paper":

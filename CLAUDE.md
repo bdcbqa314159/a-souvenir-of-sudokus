@@ -43,7 +43,10 @@ with respect.
 - Synthetic paper: `pipeline.py genpaper`
 - Family pack (real scans): `pipeline.py emit` (maintainer machine only)
 - Verify an asset's provenance watermark: `pipeline.py verify <file>`
-  (needs the secret key in `originals/atelier-work/`)
+  (needs the secret key in `originals/atelier-work/`; `pipeline.py genkey`
+  creates it explicitly — nothing mints a key as a side effect)
+- Watermark regression suite: `.venv/bin/python test_watermark.py` (key
+  holder's machine only) — run after ANY change to the mark/verify code
 
 ## Known flakes & gotchas
 
