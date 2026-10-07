@@ -1075,6 +1075,11 @@ fn App() -> impl IntoView {
             msg.set(tr.won.into());
             return;
         }
+        // a solved board has nothing left to haunt (audit #3 review)
+        if game.get_untracked().as_ref().is_some_and(solved_game) && mode.get_untracked() != Mode::Phantom {
+            msg.set(tr.solved.into());
+            return;
+        }
         if mode.get_untracked() == Mode::Phantom {
             let armed_recently =
                 leave_arm.get_untracked().is_some_and(|t| js_sys::Date::now() - t < 3_000.0);
