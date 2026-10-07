@@ -1,11 +1,32 @@
 # a-souvenir-of-sudokus
 
-A sudoku game built engine-first. The engine is a pure library (`sudoku.py`)
-with a JSON game-state contract; frontends are thin layers on top — the CLI
-(`cli.py`) is the first, browser/desktop come later.
+### ▶ [Play it in your browser](https://bdcbqa314159.github.io/a-souvenir-of-sudokus/) — nothing to install, works on phones too.
 
-The final rendering will be built from photographs of the original handwritten
-grids this game is named after.
+A sudoku game dedicated to *el abuelo*. The digits are an original generated
+typeface derived from his handwriting; the paper is drawn from measurements
+of his notebook. Classic mode, and a **phantom mode** where the puzzle flips
+into its phantom twin if you stall too long.
+
+## Download the desktop app
+
+Grab the file for your system from the
+[**latest release**](https://github.com/bdcbqa314159/a-souvenir-of-sudokus/releases/latest)
+(ignore the "Source code" entries — those are for programmers):
+
+| System | File | First-open note |
+|---|---|---|
+| **Windows** | `...WINDOWS-setup.exe` | if Windows says "protected your PC": *More info → Run anyway* (once) |
+| **Mac** | `...MACOS.zip` | unzip, drag to Applications; first open: *right-click → Open* (once) |
+| **Linux** | `...LINUX.AppImage` | `chmod +x`, then run |
+
+The warnings appear because the app isn't code-signed — it's a small family
+project. Full Windows walkthrough in three languages below.
+
+---
+
+Engine-first architecture: a C++20 engine with one JSON command surface
+(`engine/include/souvenir/api.hpp`); every frontend — web, desktop, CLI —
+is a thin client of it.
 
 ## Install on Windows · Installer sous Windows · Instalar en Windows
 
@@ -49,17 +70,15 @@ python3 cli.py [easy|medium|hard] [seed]   # line-mode REPL
 ### Browser (Rust · Leptos → wasm)
 
 ```
-./scripts/scrub-paths.sh   # once per clone: strips personal paths from built binaries
-source .emsdk/emsdk_env.sh
-emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
-cmake --build engine/build/wasm -j
-cd web && trunk serve --open
+./scripts/build-desktop.sh      # desktop app for this OS (also builds the wasm engine)
+./scripts/dev-serve.sh          # dev server at https://localhost:8642 (append ?dev for solve button)
 ```
 
 Same keys as the TUI (hjkl/arrows, 1-9, m pencil, x clear, u/r undo/redo,
-H hint, c check, n new) plus mouse. Digits render from the asset pack in
-`web/assets/` — the placeholder pack today; `assets/grandpere/`, cut from the
-original handwritten grids, at the end.
+H hint, c check, n new) plus mouse/touch. Digits render from the asset pack
+in `web/assets/grandpere/` — the generated typeface, committed to the repo,
+so a bare clone builds the complete game (see BUILDING.md and
+ASSETS-LICENSE.md).
 
 REPL commands: `put r c v` · `del r c` · `hint` · `check` · `solve` · `save` · `load` · `new` · `quit`
 
@@ -118,4 +137,10 @@ node test_wasm.mjs
 - [x] Phantom overlay: incoming givens fade in, flip becomes a crossfade
 - [x] Game rules: hints/checks capped (3 each), none in phantom, deliberate phantom exit, `?dev` uncaps
 - [x] `atelier/`: photos of the handwritten grids → the `grandpere` asset pack (originals and pack stay out of git)
+- [x] The built font: generated typeface blended from the handwriting (no glyph is a scan), curated digit by digit
+- [x] Synthetic paper measured from the real notebook page; generated pack committed — clone and build anywhere
+- [x] IP: MIT code + all-rights-reserved assets, embedded stamps, authenticated invisible watermark (audited)
+- [x] Desktop app (Tauri) for macOS/Windows/Linux; browser play via GitHub Pages
+- [x] Phone-fit layout, session persistence, one-request spritesheet, composed load reveal
+- [ ] v0.1.0 release binaries · PWA (offline/installable) · Android APK
 - [x] Renderer finale — open the game with `?pack=grandpere` and it is written in his hand, on his paper
