@@ -29,15 +29,34 @@ std::optional<std::uint64_t> seed_of(const json &req) {
 int int_arg(const json &req, const char *key) {
   if (!req.contains(key) || !req[key].is_number_integer())
     throw std::invalid_argument(std::string(key) + " must be an integer");
+  // a JSON unsigned above INT64_MAX wraps get<int64_t>() into the -1
+  // sentinel — reject unsigned out-of-range on the unsigned type first
+  if (req[key].is_number_unsigned() &&
+      req[key].get<std::uint64_t>() > static_cast<std::uint64_t>(kCells))
+    throw std::invalid_argument(std::string(key) + " out of range");
   const std::int64_t n = req[key].get<std::int64_t>();
-  if (n < -1 || n > kCells) // engine re-validates exact ranges; this only blocks wrap
+  if (n < -1 || n > kCells) // engine re-validates exact ranges; this blocks wrap
     throw std::invalid_argument(std::string(key) + " out of range");
   return static_cast<int>(n);
+}
+
+// dump() recurses per nesting level; on the 64 KiB wasm stack a deeply
+// nested "game" is the one input that could crash instead of erroring
+bool too_deep(const json &j, int d) {
+  if (d <= 0)
+    return true;
+  if (j.is_object() || j.is_array())
+    for (const auto &c : j)
+      if (too_deep(c, d - 1))
+        return true;
+  return false;
 }
 
 Game game_of(const json &req) {
   if (!req.contains("game"))
     throw std::invalid_argument("missing game");
+  if (too_deep(req["game"], 64))
+    throw std::invalid_argument("bad save file: too deeply nested");
   return Game::from_json(req["game"].dump());
 }
 
@@ -59,9 +78,10 @@ std::string apply_command(const std::string &request) {
     const std::string cmd = req["cmd"].get<std::string>();
 
     if (cmd == "new") {
-      const std::string diff = req.contains("difficulty") && req["difficulty"].is_string()
-                                   ? req["difficulty"].get<std::string>()
-                                   : "medium";
+      if (req.contains("difficulty") && !req["difficulty"].is_string())
+        throw std::invalid_argument("difficulty must be one of easy, medium, hard");
+      const std::string diff =
+          req.contains("difficulty") ? req["difficulty"].get<std::string>() : "medium";
       return respond(Game::new_game(difficulty_from_string(diff), seed_of(req))).dump();
     }
     if (cmd == "load")

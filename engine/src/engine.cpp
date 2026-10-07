@@ -160,7 +160,7 @@ std::optional<Board> solve(const Board &board, std::optional<std::uint64_t> seed
 }
 
 int count_solutions(const Board &board, int limit) {
-  if (!consistent(board))
+  if (limit <= 0 || !consistent(board))
     return 0;
   Board b = board;
   int n = 0;
@@ -234,7 +234,8 @@ Game phantom_of(const Game &game, std::optional<std::uint64_t> seed) {
     if (game.board()[u] != 0 && game.board()[u] == game.solution()[u])
       ++correct;
   }
-  Generated g = generate_with_clues(std::max(correct, 17), seed);
+  // clamp both ends: a solved board once produced an 81-given "puzzle"
+  Generated g = generate_with_clues(std::clamp(correct, 17, 80), seed);
   return Game(g.puzzle, g.solution, game.difficulty());
 }
 
@@ -279,6 +280,8 @@ void Game::toggle_mark(int i, int v) {
 void Game::clear_marks(int i) {
   if (i < 0 || i >= kCells)
     throw std::invalid_argument("cell index out of range");
+  if (is_given(i) || board_[static_cast<std::size_t>(i)] != 0)
+    throw std::invalid_argument("cell not markable");
   marks_[static_cast<std::size_t>(i)] = 0;
 }
 
@@ -376,7 +379,16 @@ Game Game::from_json(const std::string &text) {
     auto u = static_cast<std::size_t>(i);
     if (puzzle[u] != 0 && puzzle[u] != solution[u])
       throw std::invalid_argument("bad save file: puzzle/solution mismatch");
+    // audit: a board disagreeing with its own givens produced cells that can
+    // never be filled, marked, or flagged — an unwinnable game
+    if (puzzle[u] != 0 && board[u] != puzzle[u])
+      throw std::invalid_argument("bad save file: board contradicts a given");
   }
+  // audit: a non-unique puzzle lets the player fill a perfectly valid grid
+  // that check calls wrong forever; everything engine-generated is unique by
+  // construction, from_json was the one unguarded door (< 1 ms to verify)
+  if (count_solutions(puzzle, 2) != 1)
+    throw std::invalid_argument("bad save file: puzzle is not uniquely solvable");
 
   Difficulty d = Difficulty::kMedium;
   if (j.contains("difficulty")) {
@@ -391,8 +403,13 @@ Game Game::from_json(const std::string &text) {
       throw std::invalid_argument("bad save file: marks");
     for (int i = 0; i < kCells; ++i) {
       const auto &cell = j["marks"][static_cast<std::size_t>(i)];
-      if (!cell.is_array())
+      if (!cell.is_array() || cell.size() > 9)
         throw std::invalid_argument("bad save file: marks");
+      // marks on given or filled cells would be invisible permanent state
+      // the player can neither see nor clear
+      if (!cell.empty() &&
+          (puzzle[static_cast<std::size_t>(i)] != 0 || board[static_cast<std::size_t>(i)] != 0))
+        throw std::invalid_argument("bad save file: marks on a given or filled cell");
       for (const auto &v : cell) {
         int m = digit(v, 1);
         if (m < 0)
