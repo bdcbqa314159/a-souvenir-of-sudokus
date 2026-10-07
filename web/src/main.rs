@@ -183,6 +183,10 @@ struct T {
     erase: &'static str,
     diff_hint: &'static str,
     classic: &'static str,
+    rules_btn: &'static str,
+    rules_classic: &'static str,
+    rules_phantom: &'static str,
+    close: &'static str,
 }
 
 const EN: T = T {
@@ -225,6 +229,10 @@ const EN: T = T {
     erase: "erase",
     diff_hint: "leave phantom mode to change difficulty",
     classic: "classic",
+    rules_btn: "rules",
+    rules_classic: "Fill the grid so that every row, every column and every 3\u{d7}3 box holds the digits 1 to 9, each exactly once. The black digits are given \u{2014} they were always there. Tap a cell, then a digit from the palette, to write in red; the pencil leaves small marks while you think. You have 3 hints and 3 checks per game \u{2014} spend them wisely.",
+    rules_phantom: "Phantom mode is a pact with the clock: keep placing correct digits, and the page stays yours. Stall too long and the haunting begins \u{2014} another grid fades in over the board. Place a correct digit before it settles to ward it off; fail, and the sudoku flips into its phantom: your correct work survives, but the puzzle reshapes around it. Three lives per game, no hints, no checks \u{2014} trust your hand.",
+    close: "close",
 };
 
 const FR: T = T {
@@ -267,6 +275,10 @@ const FR: T = T {
     erase: "effacer",
     diff_hint: "quitte le mode fantôme pour changer de difficulté",
     classic: "classique",
+    rules_btn: "r\u{e8}gles",
+    rules_classic: "Remplis la grille pour que chaque ligne, chaque colonne et chaque carr\u{e9} 3\u{d7}3 contiennent les chiffres de 1 \u{e0} 9, une seule fois chacun. Les chiffres noirs sont donn\u{e9}s \u{2014} ils ont toujours \u{e9}t\u{e9} l\u{e0}. Touche une case puis un chiffre de la palette pour \u{e9}crire en rouge ; le crayon pose de petites notes pendant que tu r\u{e9}fl\u{e9}chis. Tu as 3 indices et 3 v\u{e9}rifications par partie \u{2014} d\u{e9}pense-les avec sagesse.",
+    rules_phantom: "Le mode fant\u{f4}me est un pacte avec l'horloge : continue \u{e0} placer des chiffres justes, et la page reste \u{e0} toi. Tarde trop et la hantise commence \u{2014} une autre grille appara\u{ee}t en transparence sur la tienne. Place un chiffre juste avant qu'elle ne s'installe pour la repousser ; sinon, le sudoku bascule en son fant\u{f4}me : ton travail juste survit, mais l'\u{e9}nigme se recompose autour. Trois vies par partie, sans indices ni v\u{e9}rifications \u{2014} fie-toi \u{e0} ta main.",
+    close: "fermer",
 };
 
 const ES: T = T {
@@ -309,6 +321,10 @@ const ES: T = T {
     erase: "borrar",
     diff_hint: "sal del modo fantasma para cambiar la dificultad",
     classic: "clásico",
+    rules_btn: "reglas",
+    rules_classic: "Rellena la cuadr\u{ed}cula para que cada fila, cada columna y cada caja de 3\u{d7}3 contengan los d\u{ed}gitos del 1 al 9, una sola vez cada uno. Los d\u{ed}gitos negros vienen dados \u{2014} siempre estuvieron ah\u{ed}. Toca una celda y luego un d\u{ed}gito de la paleta para escribir en rojo; el l\u{e1}piz deja peque\u{f1}as notas mientras piensas. Tienes 3 pistas y 3 comprobaciones por partida \u{2014} g\u{e1}stalas con cabeza.",
+    rules_phantom: "El modo fantasma es un pacto con el reloj: sigue colocando d\u{ed}gitos correctos y la p\u{e1}gina seguir\u{e1} siendo tuya. Si tardas demasiado, empieza el embrujo \u{2014} otra cuadr\u{ed}cula se trasluce sobre la tuya. Coloca un d\u{ed}gito correcto antes de que se asiente para ahuyentarla; si no, el sudoku se convierte en su fantasma: tu trabajo correcto sobrevive, pero el enigma se recompone a su alrededor. Tres vidas por partida, sin pistas ni comprobaciones \u{2014} conf\u{ed}a en tu mano.",
+    close: "cerrar",
 };
 
 fn t(lang: Lang) -> &'static T {
@@ -534,6 +550,7 @@ fn App() -> impl IntoView {
     let souvenir_pack: RwSignal<String> = RwSignal::new("assets/grandpere".into());
     // autosave arms only after restore has had its chance (see Effect below)
     let session_ready = RwSignal::new(false);
+    let show_rules = RwSignal::new(false);
     // composed reveal: a splash covers the page until the engine, the game,
     // the paper AND the sprite are all ready — then one fade shows the
     // finished board. Loading never performs its scatter in public.
@@ -1084,7 +1101,7 @@ fn App() -> impl IntoView {
     view! {
         <div class="splash" class:hidden=ready>
             <h1>"a-souvenir-of-sudokus"</h1>
-            <div class="dots">"· · ·"</div>
+            <div class="dots"><span>"●"</span><span>"●"</span><span>"●"</span></div>
         </div>
         {move || {
             let (p, s) = preload.get();
@@ -1200,10 +1217,23 @@ fn App() -> impl IntoView {
                     })
                     .collect::<Vec<_>>()}
             </span>
+            <button title=move || t(lang.get()).rules_btn on:click=move |_| show_rules.set(true)>"?"</button>
         </div>
         <div class="msg" class:solved=solved>{move || msg.get()}</div>
         <div class="status">{status}</div>
         </div>
+        {move || show_rules.get().then(|| view! {
+            <div class="rules-overlay" on:click=move |_| show_rules.set(false)>
+                <div class="rules-card" on:click=|e| e.stop_propagation()>
+                    <h1>"a-souvenir-of-sudokus"</h1>
+                    <h2>{move || t(lang.get()).classic}</h2>
+                    <p>{move || t(lang.get()).rules_classic}</p>
+                    <h2>{move || t(lang.get()).phantom}</h2>
+                    <p>{move || t(lang.get()).rules_phantom}</p>
+                    <button on:click=move |_| show_rules.set(false)>{move || t(lang.get()).close}</button>
+                </div>
+            </div>
+        })}
     }
 }
 
