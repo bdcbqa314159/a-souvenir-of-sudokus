@@ -74,7 +74,8 @@ public:
       throw std::invalid_argument("cell index out of range");
     return puzzle_[static_cast<std::size_t>(i)] != 0;
   }
-  void put(int i, int v);         // v = 0 clears; erases the cell's marks, prunes peer marks
+  void put(int i, int v); // non-zero v erases the cell's marks and prunes v from peers; v = 0 only
+                          // clears the value
   void toggle_mark(int i, int v); // pencil mark, only on empty non-given cells
   void clear_marks(int i);        // erase every pencil mark in one cell
   std::uint16_t marks(int i) const {
@@ -109,7 +110,7 @@ private:
 
 // The phantom flip: a fresh puzzle whose given count equals the game's currently
 // correct cell count (givens + correct entries), so the player's coverage carries
-// over. Counts below 17 are clamped up — gameplay must go on. Difficulty label is
+// over. Counts are clamped into [17, 80] — gameplay must go on. Difficulty label is
 // preserved; board resets to the new givens, marks cleared.
 Game phantom_of(const Game &game, std::optional<std::uint64_t> seed = std::nullopt);
 

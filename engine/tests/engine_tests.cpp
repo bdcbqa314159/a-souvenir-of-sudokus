@@ -321,3 +321,101 @@ TEST(Json, MalformedRejected) {
     }
   EXPECT_NO_THROW(Game::from_json(ok.dump()));
 }
+
+// ---- 2026-10 audit regressions: the engine audit's confirmed findings ----
+
+TEST(AuditRegressions, SaveValidationClosesUnwinnableStates) {
+  using nlohmann::json;
+  Game g = Game::new_game(Difficulty::kEasy, 7);
+  json j = json::parse(g.to_json());
+  auto corrupt = [&](auto mutate) {
+    auto c = j;
+    mutate(c);
+    EXPECT_THROW(Game::from_json(c.dump()), std::invalid_argument);
+  };
+  // a given blanked on the board: unfillable, unmarkable, check-invisible
+  corrupt([](json &c) {
+    for (int i = 0; i < kCells; ++i)
+      if (c["puzzle"][static_cast<std::size_t>(i)].get<int>() != 0) {
+        c["board"][static_cast<std::size_t>(i)] = 0;
+        break;
+      }
+  });
+  // a given overwritten with a wrong digit: visibly wrong, unfixable
+  corrupt([](json &c) {
+    for (int i = 0; i < kCells; ++i) {
+      int p = c["puzzle"][static_cast<std::size_t>(i)].get<int>();
+      if (p != 0) {
+        c["board"][static_cast<std::size_t>(i)] = (p % 9) + 1;
+        break;
+      }
+    }
+  });
+  // a puzzle that is not uniquely solvable: a valid fill would be "wrong" forever
+  corrupt([](json &c) {
+    for (int i = 0; i < kCells; ++i) {
+      c["puzzle"][static_cast<std::size_t>(i)] = 0;
+      c["board"][static_cast<std::size_t>(i)] = 0;
+    }
+  });
+  // marks on a given cell, and oversized mark lists
+  corrupt([](json &c) {
+    for (int i = 0; i < kCells; ++i)
+      if (c["puzzle"][static_cast<std::size_t>(i)].get<int>() != 0) {
+        c["marks"][static_cast<std::size_t>(i)] = {3, 7};
+        break;
+      }
+  });
+  corrupt([](json &c) {
+    for (int i = 0; i < kCells; ++i)
+      if (c["puzzle"][static_cast<std::size_t>(i)].get<int>() == 0 &&
+          c["board"][static_cast<std::size_t>(i)].get<int>() == 0) {
+        c["marks"][static_cast<std::size_t>(i)] = json::array();
+        for (int k = 0; k < 12; ++k)
+          c["marks"][static_cast<std::size_t>(i)].push_back(1 + (k % 9));
+        break;
+      }
+  });
+}
+
+TEST(AuditRegressions, ClearMarksGuardsLikeToggleMark) {
+  Game g = Game::new_game(Difficulty::kEasy, 7);
+  int given = -1;
+  for (int i = 0; i < kCells; ++i)
+    if (g.is_given(i)) {
+      given = i;
+      break;
+    }
+  ASSERT_NE(given, -1);
+  EXPECT_THROW(g.clear_marks(given), std::invalid_argument);
+}
+
+TEST(AuditRegressions, PhantomOfSolvedBoardIsStillAPuzzle) {
+  Game g = Game::new_game(Difficulty::kEasy, 7);
+  g.set_board(g.solution());
+  Game p = phantom_of(g, 7);
+  int zeros = 0;
+  for (int v : p.puzzle())
+    zeros += (v == 0);
+  EXPECT_GE(zeros, 1); // clamped at 80 clues: never an already-solved "puzzle"
+}
+
+TEST(AuditRegressions, WireSurfaceHardening) {
+  using nlohmann::json;
+  auto call = [](json req) { return json::parse(souvenir::apply_command(req.dump())); };
+  // deeply nested game errors instead of blowing the (wasm) stack in dump()
+  json deep = 1;
+  for (int i = 0; i < 100; ++i)
+    deep = json::array({deep});
+  EXPECT_EQ(call({{"cmd", "load"}, {"game", deep}})["ok"], false);
+  // u64 wrap into the -1 sentinel is rejected at the boundary
+  json game = call({{"cmd", "new"}, {"seed", 42}})["game"];
+  json wrap = call({{"cmd", "put"}, {"game", game}, {"i", 18446744073709551615ULL}, {"v", 5}});
+  EXPECT_EQ(wrap["ok"], false);
+  EXPECT_EQ(wrap["error"], "i out of range");
+  // wrong-typed difficulty is an error, not a silent medium
+  EXPECT_EQ(call({{"cmd", "new"}, {"difficulty", 5}})["ok"], false);
+  // count_solutions(board, 0) is 0, not 1
+  Game g = Game::new_game(Difficulty::kEasy, 7);
+  EXPECT_EQ(souvenir::count_solutions(g.puzzle(), 0), 0);
+}
