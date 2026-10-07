@@ -76,3 +76,9 @@ jobs:
         run: >
           clang-format --dry-run -Werror
           $(git ls-files 'engine/include/**/*.hpp' 'engine/src/*.cpp' 'engine/tests/*.cpp')
+
+  privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/check-privacy.sh
