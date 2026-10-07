@@ -4,14 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>a-souvenir-of-sudokus</title>
+  <!-- PWA: installable ("Add to Home Screen") and playable offline -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#f7f2e8" />
+  <link rel="apple-touch-icon" href="pwa/icon-192.png" />
   <!-- engine artifacts: built by emcmake (see README), copied by trunk -->
   <link data-trunk rel="copy-file" href="../engine/build/wasm/souvenir.js" data-target-path="souvenir" />
   <link data-trunk rel="copy-file" href="../engine/build/wasm/souvenir.wasm" data-target-path="souvenir" />
   <link data-trunk rel="copy-dir" href="assets" />
+  <link data-trunk rel="copy-file" href="manifest.webmanifest" />
+  <link data-trunk rel="copy-file" href="sw.js" />
+  <link data-trunk rel="copy-dir" href="pwa" />
   <script type="module">
     import createSouvenir from "./souvenir/souvenir.js";
     const mod = await createSouvenir();
     window.souvenir_cmd = mod.cwrap("souvenir_cmd", "string", ["string"]);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    }
   </script>
   <style>
     :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a; --cell: 3.2rem; }
