@@ -63,12 +63,13 @@ r = cli(TMP / "lsb_noise.png")
 ok("stray LSB data rejected (audit #2)", r.returncode != 0 and "LSB plane" in (r.stdout + r.stderr))
 
 # 3. ANSI escape in a stamp minted WITH the real key -> escaped on output
-STAMP_SAVE = STAMP
-import pipeline
+# patch the module that OWNS the constant: watermark() reads provenance.STAMP
+import provenance
 
-pipeline.STAMP = "\x1b[2K\rNOT VERIFIED - EVIL"
+STAMP_SAVE = provenance.STAMP
+provenance.STAMP = "\x1b[2K\rNOT VERIFIED - EVIL"
 ansi = watermark(arr)
-pipeline.STAMP = STAMP_SAVE
+provenance.STAMP = STAMP_SAVE
 Image.fromarray(ansi.reshape(arr.shape)).save(TMP / "ansi.png")
 r = cli(TMP / "ansi.png")
 ok("verdict line precedes payload; ESC never printed raw (audit #3)",
