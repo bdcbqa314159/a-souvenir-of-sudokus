@@ -1,0 +1,141 @@
+name: release
+
+# Builds the desktop app for all three platforms on GitHub's runners and
+# attaches the binaries to a DRAFT release — nothing is uploaded by hand and
+# nothing goes public until the draft is published. Trigger with a tag push
+# (v*) or Actions -> release -> Run workflow.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag to build (e.g. v0.1.0 or v0.0.1-test)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pick
+        run: echo "tag=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+      - name: Create the draft release if it does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pick.outputs.tag }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 && exit 0
+          gh release create "$TAG" --draft --title "a-souvenir-of-sudokus $TAG" \
+            --notes "Draft — binaries are uploaded by the release workflow. See README for install notes."
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux webview + build deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libssl-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64 # keep == the version pinned in .emsdk locally and in ci.yml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "web -> target\nweb/src-tauri -> target"
+      - uses: jetli/trunk-action@v0.5.0
+        with:
+          version: "v0.21.14"
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Scrub personal paths from build artifacts
+        run: ./scripts/scrub-paths.sh
+
+      - name: Engine -> wasm
+        run: |
+          emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build engine/build/wasm -j
+
+      - name: Build the app
+        run: |
+          cd web
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            # dmg bundling needs an interactive terminal; the shipped artifact
+            # is the zipped .app (see BUILDING.md)
+            cargo tauri build --bundles app
+          else
+            cargo tauri build
+          fi
+
+      - name: Collect the artifact under a player-friendly name
+        id: pack
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          B=web/src-tauri/target/release/bundle
+          case "${{ matrix.os }}" in
+            macos-latest)
+              app=$(ls -d "$B"/macos/*.app | head -1)
+              ditto -c -k --keepParent "$app" "$out/a-souvenir-of-sudokus-MACOS.zip" ;;
+            windows-latest)
+              exe=$(ls "$B"/nsis/*-setup.exe | head -1)
+              cp "$exe" "$out/a-souvenir-of-sudokus-WINDOWS-setup.exe" ;;
+            ubuntu-latest)
+              img=$(ls "$B"/appimage/*.AppImage | head -1)
+              cp "$img" "$out/a-souvenir-of-sudokus-LINUX.AppImage" ;;
+          esac
+          ls -la "$out"
+          echo "dir=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Sanity-check the binary (generated pack, no personal strings)
+        run: |
+          set -euo pipefail
+          f=$(ls "${{ steps.pack.outputs.dir }}" | head -1)
+          size=$(wc -c < "${{ steps.pack.outputs.dir }}/$f")
+          [ "$size" -gt 2000000 ] || { echo "artifact suspiciously small: $size bytes" >&2; exit 1; }
+          # the pack must be the committed generated one — a CI clone has no abuelo/
+          [ ! -d web/assets/abuelo ] || { echo "family pack present in CI — refusing to publish" >&2; exit 1; }
+          echo "ok: $f ($size bytes)"
+
+      - name: Upload to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.draft.outputs.tag }}" "${{ steps.pack.outputs.dir }}"/* --clobber
+
+  checksums:
+    needs: [draft, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish SHA256SUMS for every binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.draft.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p dl && cd dl
+          gh release download "$TAG" --pattern 'a-souvenir-of-sudokus-*' --clobber
+          sha256sum a-souvenir-of-sudokus-* > SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber
