@@ -56,3 +56,23 @@ impl Phantom {
         self.last_progress.set(js_sys::Date::now());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_clock_tightens_with_difficulty() {
+        assert!(stall_ms("easy") > stall_ms("medium"));
+        assert!(stall_ms("medium") > stall_ms("hard"));
+        assert!(window_ms("easy") >= window_ms("hard"));
+    }
+
+    #[test]
+    fn an_unknown_difficulty_still_yields_a_sane_clock() {
+        for d in ["", "PWNED", "ＨＡＲＤ"] {
+            assert!(stall_ms(d) > 0.0 && stall_ms(d).is_finite());
+            assert!(window_ms(d) > 0.0 && window_ms(d).is_finite());
+        }
+    }
+}

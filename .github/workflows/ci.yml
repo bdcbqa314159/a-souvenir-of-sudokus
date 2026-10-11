@@ -60,6 +60,8 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - uses: jetli/trunk-action@v0.5.0
+      - name: Web unit tests (host target)
+        run: cd web && cargo test
       - name: Build web frontend
         run: cd web && trunk build --release
 
