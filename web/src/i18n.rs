@@ -34,8 +34,8 @@ pub struct T {
     pub engine_loading: &'static str,
     pub solved: &'static str,
     pub all_good: &'static str,
-    pub wrong_cells: &'static str,   // {} count
-    pub new_game_msg: &'static str,  // {} difficulty label
+    pub wrong_cells: &'static str,  // {} count
+    pub new_game_msg: &'static str, // {} difficulty label
     pub hints_noun: &'static str,
     pub checks_noun: &'static str,
     pub no_assist_phantom: &'static str, // {} noun
@@ -265,3 +265,49 @@ pub fn translate_engine_error(lang: Lang, err: &str) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_language_is_wired() {
+        assert_eq!(t(Lang::En).hint, EN.hint);
+        assert_eq!(t(Lang::Fr).hint, FR.hint);
+        assert_eq!(t(Lang::Es).hint, ES.hint);
+        for tr in [&EN, &FR, &ES] {
+            assert!(!tr.rules_classic.is_empty() && !tr.rules_phantom.is_empty());
+            assert!(
+                tr.wrong_cells.contains("{}"),
+                "placeholder must survive translation"
+            );
+        }
+    }
+
+    #[test]
+    fn fill_substitutes_once() {
+        assert_eq!(fill("{} wrong cell(s)", "3"), "3 wrong cell(s)");
+        assert_eq!(fill("no placeholder", "3"), "no placeholder");
+    }
+
+    #[test]
+    fn difficulty_labels_translate_and_fall_back() {
+        assert_eq!(diff_label(Lang::Fr, "easy"), FR.easy);
+        assert_eq!(diff_label(Lang::Es, "hard"), ES.hard);
+        assert_eq!(
+            diff_label(Lang::En, "nonsense"),
+            EN.medium,
+            "unknown label falls back"
+        );
+    }
+
+    #[test]
+    fn engine_errors_translate_without_swallowing_unknowns() {
+        let known = translate_engine_error(Lang::Fr, "cell is a given");
+        assert_eq!(known, FR.given_locked);
+        let unknown = translate_engine_error(Lang::Fr, "something new from the engine");
+        assert!(
+            unknown.contains("something new"),
+            "unknown errors must still reach the player"
+        );
+    }
+}

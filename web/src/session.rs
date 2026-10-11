@@ -24,4 +24,3 @@ pub fn load_session() -> Option<Value> {
     let raw = store.get_item(SESSION_KEY).ok()??;
     serde_json::from_str(&raw).ok()
 }
-

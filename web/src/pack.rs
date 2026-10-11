@@ -16,7 +16,11 @@ pub fn pack_store() -> &'static std::sync::Mutex<Option<String>> {
 }
 
 pub fn pack() -> String {
-    pack_store().lock().unwrap().clone().unwrap_or_else(|| "assets/placeholder".into())
+    pack_store()
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap_or_else(|| "assets/placeholder".into())
 }
 
 /// Content revision of the loaded pack (manifest "rev"). Appended as ?v= to
@@ -29,7 +33,11 @@ pub fn rev_store() -> &'static std::sync::Mutex<String> {
 
 pub fn versioned(url: String) -> String {
     let rev = rev_store().lock().unwrap().clone();
-    if rev.is_empty() { url } else { format!("{url}?v={rev}") }
+    if rev.is_empty() {
+        url
+    } else {
+        format!("{url}?v={rev}")
+    }
 }
 
 /// Spritesheet of the loaded pack: (file, cols, rows, rel-path -> tile index).
@@ -62,7 +70,9 @@ pub async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bo
     let Ok(rsp) = gloo_net::http::Request::get(&url).send().await else {
         return false;
     };
-    let Ok(m) = rsp.json::<Value>().await else { return false };
+    let Ok(m) = rsp.json::<Value>().await else {
+        return false;
+    };
     let Ok(parsed) = serde_json::from_value::<Manifest>(m["digits"].clone()) else {
         return false;
     };
@@ -75,7 +85,12 @@ pub async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bo
             .iter()
             .filter_map(|(k, v)| Some((k.clone(), v.as_u64()? as u32)))
             .collect();
-        Some((s["file"].as_str()?.to_string(), s["cols"].as_u64()? as u32, s["rows"].as_u64()? as u32, index))
+        Some((
+            s["file"].as_str()?.to_string(),
+            s["cols"].as_u64()? as u32,
+            s["rows"].as_u64()? as u32,
+            index,
+        ))
     })();
     // a pack may bring its own paper — the page becomes his notebook;
     // a paperless pack (classic) falls back to the plain CSS cream
@@ -100,7 +115,9 @@ pub fn url_pack() -> Option<String> {
     for kv in search.trim_start_matches('?').split('&') {
         if let Some(name) = kv.strip_prefix("pack=") {
             if !name.is_empty()
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             {
                 return Some(format!("assets/{name}"));
             }
@@ -121,8 +138,16 @@ pub fn digit_style(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> 
     if let Some((file, cols, rows, index)) = sprite {
         if let Some(&n) = index.get(v) {
             let (c, r) = (n % cols, n / cols);
-            let px = if cols > 1 { c as f64 * 100.0 / (cols - 1) as f64 } else { 0.0 };
-            let py = if rows > 1 { r as f64 * 100.0 / (rows - 1) as f64 } else { 0.0 };
+            let px = if cols > 1 {
+                c as f64 * 100.0 / (cols - 1) as f64
+            } else {
+                0.0
+            };
+            let py = if rows > 1 {
+                r as f64 * 100.0 / (rows - 1) as f64
+            } else {
+                0.0
+            };
             let url = versioned(format!("{}/{file}", pack()));
             return Some(format!(
                 "background-image:url('{url}');background-size:{}% {}%;background-position:{px:.4}% {py:.4}%",
@@ -132,5 +157,76 @@ pub fn digit_style(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> 
         }
     }
     let url = versioned(format!("{}/{v}", pack()));
-    Some(format!("background-image:url('{url}');background-size:contain;background-position:center"))
+    Some(format!(
+        "background-image:url('{url}');background-size:contain;background-position:center"
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest() -> Manifest {
+        let mut given = HashMap::new();
+        given.insert(
+            "1".to_string(),
+            vec![
+                "digits/given/1_s00.png".into(),
+                "digits/given/1_s01.png".into(),
+            ],
+        );
+        given.insert("2".to_string(), vec![]); // a sparse pack must degrade, not panic
+        let mut m = HashMap::new();
+        m.insert("given".to_string(), given);
+        m
+    }
+
+    /// These tests share the process-wide pack/rev/sprite stores, so they run
+    /// as one test rather than racing each other.
+    #[test]
+    fn glyph_styling_covers_sprite_and_per_file_packs() {
+        let man = manifest();
+        *pack_store().lock().unwrap() = Some("assets/grandpere".into());
+        *rev_store().lock().unwrap() = String::new();
+        *sprite_store().lock().unwrap() = None;
+
+        // per-file fallback (no sprite): a plain background image
+        let s = digit_style(&man, "given", 1, 0).expect("style for a present digit");
+        assert!(s.contains("url('assets/grandpere/digits/given/1_s"), "{s}");
+        assert!(s.contains("background-size:contain"), "{s}");
+        assert!(!s.contains('?'), "no rev means no cache-busting query: {s}");
+
+        // a content revision reaches the URL
+        *rev_store().lock().unwrap() = "abc123".into();
+        assert!(digit_style(&man, "given", 1, 0)
+            .unwrap()
+            .contains("?v=abc123"));
+
+        // sprite packs paint by position, from ONE image
+        let mut index = HashMap::new();
+        index.insert("digits/given/1_s00.png".to_string(), 0u32);
+        index.insert("digits/given/1_s01.png".to_string(), 16u32); // row 1, col 1 of a 15-wide sheet
+        *sprite_store().lock().unwrap() = Some(("sprite.png".into(), 15, 12, index));
+        let a = digit_style(&man, "given", 1, 0).unwrap();
+        assert!(a.contains("sprite.png?v=abc123"), "{a}");
+        assert!(a.contains("background-size:1500% 1200%"), "{a}");
+
+        // the chosen variant is deterministic per (cell, digit) — the page
+        // looks written, not stamped, and never reshuffles on re-render
+        let again = digit_style(&man, "given", 1, 0).unwrap();
+        assert_eq!(a, again);
+        let other_cell = digit_style(&man, "given", 1, 1).unwrap();
+        assert_ne!(a, other_cell, "neighbouring cells pick different variants");
+
+        // sparse and missing entries degrade to None, never a panic
+        assert!(
+            digit_style(&man, "given", 2, 0).is_none(),
+            "empty variant list"
+        );
+        assert!(digit_style(&man, "given", 9, 0).is_none(), "absent digit");
+        assert!(digit_style(&man, "user", 1, 0).is_none(), "absent role");
+
+        *sprite_store().lock().unwrap() = None;
+        *rev_store().lock().unwrap() = String::new();
+    }
 }

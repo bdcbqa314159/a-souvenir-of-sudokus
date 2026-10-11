@@ -49,8 +49,12 @@ fn App() -> impl IntoView {
     let hints_left = RwSignal::new(HINTS);
     let checks_left = RwSignal::new(CHECKS);
     let leave_arm: RwSignal<Option<f64>> = RwSignal::new(None); // phantom exit confirm
-    // dev mode (?dev in the URL): assists uncapped — the debugging use survives
-    let dev = window().location().search().unwrap_or_default().contains("dev");
+                                                                // dev mode (?dev in the URL): assists uncapped — the debugging use survives
+    let dev = window()
+        .location()
+        .search()
+        .unwrap_or_default()
+        .contains("dev");
     let flip_anim = RwSignal::new(false);
     // classic/souvenir toggle: shown only when a souvenir pack exists;
     // remembers WHICH one loaded (abuelo or grandpere) as the toggle target
@@ -115,9 +119,27 @@ fn App() -> impl IntoView {
                 return false;
             }
             game.set(Some(s["game"].clone()));
-            hints_left.set(s["hints"].as_u64().map(|v| v as u32).unwrap_or(HINTS).min(HINTS));
-            checks_left.set(s["checks"].as_u64().map(|v| v as u32).unwrap_or(CHECKS).min(CHECKS));
-            ph.lives.set(s["lives"].as_u64().map(|v| v as u32).unwrap_or(LIVES).min(LIVES));
+            hints_left.set(
+                s["hints"]
+                    .as_u64()
+                    .map(|v| v as u32)
+                    .unwrap_or(HINTS)
+                    .min(HINTS),
+            );
+            checks_left.set(
+                s["checks"]
+                    .as_u64()
+                    .map(|v| v as u32)
+                    .unwrap_or(CHECKS)
+                    .min(CHECKS),
+            );
+            ph.lives.set(
+                s["lives"]
+                    .as_u64()
+                    .map(|v| v as u32)
+                    .unwrap_or(LIVES)
+                    .min(LIVES),
+            );
             ph.over.set(s["over"].as_bool().unwrap_or(false));
             if s["mode"] == "phantom" {
                 mode.set(Mode::Phantom);
@@ -166,7 +188,9 @@ fn App() -> impl IntoView {
             if mode.get_untracked() != Mode::Phantom || ph.over.get_untracked() {
                 continue;
             }
-            let Some(g) = game.get_untracked() else { continue };
+            let Some(g) = game.get_untracked() else {
+                continue;
+            };
             if solved_game(&g) {
                 continue; // solved — the phantoms lost
             }
@@ -400,7 +424,8 @@ fn App() -> impl IntoView {
                     .get_untracked()
                     .map(|g| board_of(&g, "board")[i])
                     .unwrap_or(0);
-                let accepted = play(json!({"cmd": if mark { "mark" } else { "put" }, "i": i, "v": v}));
+                let accepted =
+                    play(json!({"cmd": if mark { "mark" } else { "put" }, "i": i, "v": v}));
                 // progress = the engine ACCEPTED a NEW, correct placement.
                 // A rejected keystroke on a given, or retyping an already-correct
                 // digit, must never ward the phantom off.
@@ -423,7 +448,10 @@ fn App() -> impl IntoView {
     window_event_listener(leptos::ev::keydown, move |ev| {
         let key = ev.key();
         if !ev.ctrl_key() && !ev.meta_key() && !ev.alt_key() {
-            if matches!(key.as_str(), "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Backspace") {
+            if matches!(
+                key.as_str(),
+                "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Backspace"
+            ) {
                 ev.prevent_default();
             }
             key_action(&key);
@@ -441,7 +469,11 @@ fn App() -> impl IntoView {
             .as_array()
             .map(|a| {
                 a.iter()
-                    .map(|c| c.as_array().map(|d| d.iter().filter_map(Value::as_i64).collect()).unwrap_or_default())
+                    .map(|c| {
+                        c.as_array()
+                            .map(|d| d.iter().filter_map(Value::as_i64).collect())
+                            .unwrap_or_default()
+                    })
                     .collect()
             })
             .unwrap_or_else(|| vec![vec![]; 81]);
@@ -449,11 +481,15 @@ fn App() -> impl IntoView {
         let sel_value = board[sel];
         // the ghost: while haunted, the incoming puzzle's givens materialize over
         // the grid, solidifying as the grace window runs out
-        let ghost: Option<(Vec<i64>, f64)> = ph.haunt_start.get().zip(ph.incoming.get()).map(|(t0, inc)| {
-            let diff = g["difficulty"].as_str().unwrap_or("medium");
-            let progress = ((now.get() - t0) / window_ms(diff)).clamp(0.0, 1.0);
-            (board_of(&inc, "puzzle"), 0.08 + 0.45 * progress)
-        });
+        let ghost: Option<(Vec<i64>, f64)> =
+            ph.haunt_start
+                .get()
+                .zip(ph.incoming.get())
+                .map(|(t0, inc)| {
+                    let diff = g["difficulty"].as_str().unwrap_or("medium");
+                    let progress = ((now.get() - t0) / window_ms(diff)).clamp(0.0, 1.0);
+                    (board_of(&inc, "puzzle"), 0.08 + 0.45 * progress)
+                });
         (0..81usize)
             .map(|i| {
                 let v = board[i];
@@ -584,8 +620,9 @@ fn App() -> impl IntoView {
             return;
         }
         if mode.get_untracked() == Mode::Phantom {
-            let armed_recently =
-                leave_arm.get_untracked().is_some_and(|t| js_sys::Date::now() - t < 3_000.0);
+            let armed_recently = leave_arm
+                .get_untracked()
+                .is_some_and(|t| js_sys::Date::now() - t < 3_000.0);
             if !armed_recently {
                 leave_arm.set(Some(js_sys::Date::now()));
                 msg.set(tr.leave_confirm.into());
@@ -601,8 +638,11 @@ fn App() -> impl IntoView {
         ph.clear_haunt();
         ph.last_progress.set(js_sys::Date::now());
     };
-    let current_diff =
-        move || game.get().and_then(|g| g["difficulty"].as_str().map(String::from)).unwrap_or_default();
+    let current_diff = move || {
+        game.get()
+            .and_then(|g| g["difficulty"].as_str().map(String::from))
+            .unwrap_or_default()
+    };
 
     let ready = move || game.get().is_some() && paper_ok.get() && sprite_ok.get();
 
