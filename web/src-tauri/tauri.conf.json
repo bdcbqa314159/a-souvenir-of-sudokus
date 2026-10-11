@@ -16,7 +16,10 @@
         "width": 760,
         "height": 900,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "minWidth": 380,
+        "minHeight": 480,
+        "center": true
       }
     ],
     "security": {
