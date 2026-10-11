@@ -4,6 +4,12 @@ Requires the bindings built:
   cmake --preset release -S engine -DSOUVENIR_BUILD_PYTHON=ON && cmake --build --preset release engine
 """
 import json
+import pathlib
+import sys
+
+# the draft engine and the first frontends live in legacy/ now; this suite
+# still cross-checks the compiled engine against them (see legacy/README.md)
+sys.path.insert(0, str(pathlib.Path(__file__).parent / "legacy"))
 
 import souvenir
 import sudoku  # the retired Python draft — kept as the spec and cross-check

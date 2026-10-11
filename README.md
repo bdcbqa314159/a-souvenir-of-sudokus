@@ -63,8 +63,8 @@ Build the engine module once, then play:
 cmake --preset release -S engine -DSOUVENIR_BUILD_PYTHON=ON
 cmake --build --preset release engine
 
-python3 tui.py [easy|medium|hard] [seed]   # vim-style grid: hjkl move, 1-9 put, x clear, u undo
-python3 cli.py [easy|medium|hard] [seed]   # line-mode REPL
+python3 legacy/tui.py [easy|medium|hard] [seed]   # vim-style grid: hjkl move, 1-9 put, x clear, u undo
+python3 legacy/cli.py [easy|medium|hard] [seed]   # line-mode REPL
 ```
 
 ### Browser (Rust · Leptos → wasm)
@@ -85,14 +85,14 @@ REPL commands: `put r c v` · `del r c` · `hint` · `check` · `solve` · `save
 ## Test
 
 ```
-python3 test_sudoku.py     # the Python spec engine
+python3 legacy/test_sudoku.py   # the Python spec engine (see legacy/README.md)
 python3 test_bindings.py   # compiled module + frontends + cross-engine save files
 ```
 
 ## C++ engine (`engine/`)
 
 The backend: same API and JSON save-file contract as the Python draft
-(`sudoku.py`, retired to executable spec), C++20, no runtime dependencies
+(`legacy/sudoku.py`, retired to executable spec), C++20, no runtime dependencies
 (nlohmann/json vendored). Consumable via CMake `FetchContent` as
 `souvenir::souvenir`. pybind11 bindings (`-DSOUVENIR_BUILD_PYTHON=ON`) build
 the `souvenir` Python module the frontends run on — local build only for now.

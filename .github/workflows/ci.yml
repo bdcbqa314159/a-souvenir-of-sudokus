@@ -29,7 +29,7 @@ jobs:
         run: |
           cmake -S engine -B build -DCMAKE_BUILD_TYPE=Release -DSOUVENIR_BUILD_PYTHON=ON -DSOUVENIR_BUILD_TESTS=OFF
           cmake --build build -j
-      - run: python3 test_sudoku.py
+      - run: python3 legacy/test_sudoku.py
       - run: python3 test_bindings.py
 
   wasm:
