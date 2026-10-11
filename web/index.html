@@ -24,13 +24,16 @@
     }
   </script>
   <style>
-    :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a; --cell: 3.2rem; }
+    :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a;
+            /* fit the board to whichever axis is tighter: the 9x9 plus its
+               bars must never need scrolling, on a phone or a short window */
+            --cell: min(3.2rem, (100vw - 1.6rem) / 9, (100vh - 15rem) / 9); }
     body { background: var(--paper); color: var(--ink); font-family: Georgia, serif;
            display: flex; flex-direction: column; align-items: center; margin: 1.2rem; }
     h1 { font-size: 1.1rem; font-weight: normal; letter-spacing: 0.12em; margin: 0 0 0.8rem; }
     /* phone fit: cells shrink with the viewport so the 9x9 always fits portrait */
     @media (max-width: 520px) {
-      :root { --cell: calc((100vw - 1.4rem) / 9); }
+      :root { --cell: min((100vw - 1.1rem) / 9, (100vh - 13rem) / 9); }
       body { margin: 0.5rem; }
       h1 { font-size: 0.9rem; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
     }
