@@ -64,10 +64,16 @@ pub fn sprite_store() -> &'static std::sync::Mutex<Option<Sprite>> {
 /// Fetch a pack's manifest, install it (pack path, paper, digit manifest).
 /// Used at startup and by the classic/souvenir toggle.
 pub async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bool {
-    // cache-buster: a stale cached manifest points at pack files that
-    // no longer exist after a re-emit ("broken images, wrong background")
-    let url = format!("{cand}/manifest.json?t={}", js_sys::Date::now() as u64);
-    let Ok(rsp) = gloo_net::http::Request::get(&url).send().await else {
+    // No cache-busting query here: a unique URL per load defeated the service
+    // worker's cache (an exact-URL match), so the installed app could not load
+    // a pack offline at all. `cache: no-cache` revalidates instead, which keeps
+    // a re-emitted pack fresh AND leaves one cacheable URL for offline play.
+    let url = format!("{cand}/manifest.json");
+    let Ok(rsp) = gloo_net::http::Request::get(&url)
+        .cache(web_sys::RequestCache::NoCache)
+        .send()
+        .await
+    else {
         return false;
     };
     let Ok(m) = rsp.json::<Value>().await else {
@@ -136,7 +142,7 @@ pub fn digit_style(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> 
     let v = variants.get((cell * 31 + digit as usize) % variants.len())?;
     let sprite = sprite_store().lock().unwrap().clone();
     if let Some((file, cols, rows, index)) = sprite {
-        if let Some(&n) = index.get(v) {
+        if let (Some(&n), true) = (index.get(v), cols > 0 && rows > 0) {
             let (c, r) = (n % cols, n / cols);
             let px = if cols > 1 {
                 c as f64 * 100.0 / (cols - 1) as f64
@@ -225,6 +231,15 @@ mod tests {
         );
         assert!(digit_style(&man, "given", 9, 0).is_none(), "absent digit");
         assert!(digit_style(&man, "user", 1, 0).is_none(), "absent role");
+
+        // a malformed pack must degrade, not divide by zero (audit #14)
+        let mut idx = HashMap::new();
+        idx.insert("digits/given/1_s00.png".to_string(), 0u32);
+        *sprite_store().lock().unwrap() = Some(("sprite.png".into(), 0, 0, idx));
+        assert!(
+            digit_style(&man, "given", 1, 0).is_some(),
+            "a zero-column sprite must fall back to the per-file path, not panic"
+        );
 
         *sprite_store().lock().unwrap() = None;
         *rev_store().lock().unwrap() = String::new();
