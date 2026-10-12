@@ -15,15 +15,16 @@ with respect.
 - `atelier/` — Python (cv2/sklearn/scipy) asset pipeline: photos → glyphs →
   generated typeface. See the `pipeline.py` docstring for the stages.
 
-## The pack model (important, historical naming)
+## The pack model
 
-- `web/assets/grandpere/` = the GENERATED pack (typeface + synthetic paper).
+- `web/assets/souvenir/` = the GENERATED pack (the keepsake derived from his hand) (typeface + synthetic paper).
   Committed to the repo. 100% generated pixels; style derived from real
   handwriting. Stamped + invisibly watermarked. Covered by ASSETS-LICENSE.md
   (all rights reserved — separate from the MIT code).
-- `web/assets/abuelo/` = the REAL-scan family pack. Gitignored; exists only
+- `web/assets/abuelo/` = the REAL-scan family pack — his actual handwriting. Gitignored; exists only
   on the maintainer's machine. NEVER commit anything from it.
-- Runtime pack priority: abuelo > grandpere > placeholder. A build made
+- Runtime pack priority: abuelo > souvenir > placeholder — the real hand,
+  the souvenir of it, then the stand-in. A build made
   where abuelo exists shows the real handwriting; every clone builds the
   public generated version. `scripts/build-desktop.sh` prints which one it
   bakes and fails gracefully if no valid pack exists.

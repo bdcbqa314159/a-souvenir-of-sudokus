@@ -57,9 +57,9 @@ fn App() -> impl IntoView {
         .contains("dev");
     let flip_anim = RwSignal::new(false);
     // classic/souvenir toggle: shown only when a souvenir pack exists;
-    // remembers WHICH one loaded (abuelo or grandpere) as the toggle target
+    // remembers WHICH one loaded (abuelo or souvenir) as the toggle target
     let has_souvenir = RwSignal::new(false);
-    let souvenir_pack: RwSignal<String> = RwSignal::new("assets/grandpere".into());
+    let souvenir_pack: RwSignal<String> = RwSignal::new("assets/souvenir".into());
     // autosave arms only after restore has had its chance (see Effect below)
     let session_ready = RwSignal::new(false);
     let show_rules = RwSignal::new(false);
@@ -81,10 +81,10 @@ fn App() -> impl IntoView {
         let candidates = match url_pack() {
             Some(p) => vec![p],
             // abuelo (real scans, family builds from the main machine) wins
-            // over grandpere (generated pack, committed to the public repo)
+            // over souvenir (generated pack, committed to the public repo)
             None => vec![
                 "assets/abuelo".into(),
-                "assets/grandpere".into(),
+                "assets/souvenir".into(),
                 "assets/placeholder".into(),
             ],
         };

@@ -76,7 +76,7 @@ python3 legacy/cli.py [easy|medium|hard] [seed]   # line-mode REPL
 
 Same keys as the TUI (hjkl/arrows, 1-9, m pencil, x clear, u/r undo/redo,
 H hint, c check, n new) plus mouse/touch. Digits render from the asset pack
-in `web/assets/grandpere/` — the generated typeface, committed to the repo,
+in `web/assets/souvenir/` — the generated typeface, committed to the repo,
 so a bare clone builds the complete game (see BUILDING.md and
 ASSETS-LICENSE.md).
 
@@ -136,11 +136,11 @@ node test_wasm.mjs
 - [x] Phantom grace window (correct placement wards off the flip)
 - [x] Phantom overlay: incoming givens fade in, flip becomes a crossfade
 - [x] Game rules: hints/checks capped (3 each), none in phantom, deliberate phantom exit, `?dev` uncaps
-- [x] `atelier/`: photos of the handwritten grids → the `grandpere` asset pack (originals and pack stay out of git)
+- [x] `atelier/`: photos of the handwritten grids → the `souvenir` asset pack (originals and pack stay out of git)
 - [x] The built font: generated typeface blended from the handwriting (no glyph is a scan), curated digit by digit
 - [x] Synthetic paper measured from the real notebook page; generated pack committed — clone and build anywhere
 - [x] IP: MIT code + all-rights-reserved assets, embedded stamps, authenticated invisible watermark (audited)
 - [x] Desktop app (Tauri) for macOS/Windows/Linux; browser play via GitHub Pages
 - [x] Phone-fit layout, session persistence, one-request spritesheet, composed load reveal
 - [ ] v0.1.0 release binaries · PWA (offline/installable) · Android APK
-- [x] Renderer finale — open the game with `?pack=grandpere` and it is written in his hand, on his paper
+- [x] Renderer finale — open the game with `?pack=souvenir` and it is written in his hand, on his paper

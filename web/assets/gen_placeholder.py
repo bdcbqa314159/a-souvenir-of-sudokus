@@ -4,7 +4,7 @@
 Exercises everything the final pack from atelier/ will provide: digits 1-9 in
 two pen roles (given = black ink, user = red ink), several variants per digit
 so the renderer's per-cell variant picking shows, and a manifest.json that is
-the contract atelier/ must emit for assets/grandpere/.
+the contract atelier/ must emit for assets/souvenir/.
 """
 import json
 import pathlib

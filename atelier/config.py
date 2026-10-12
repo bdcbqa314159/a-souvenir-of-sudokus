@@ -4,7 +4,7 @@ import pathlib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ORIGINALS = ROOT / "originals"
 WORK = ORIGINALS / "atelier-work"
-PACK = ROOT / "web" / "assets" / "grandpere"  # generated pack — COMMITTED to the public repo
+PACK = ROOT / "web" / "assets" / "souvenir"  # generated pack — COMMITTED to the public repo
 ABUELO = ROOT / "web" / "assets" / "abuelo"  # real-scan family pack — gitignored, this machine only
 SIDE = 1080
 CELL = SIDE // 9

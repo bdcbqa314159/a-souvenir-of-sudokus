@@ -23,7 +23,7 @@ SYNTH_TUNE = {
 def stage_synth(per_class=10, seed=7, targets=None):
     """The built font: each glyph is a blend of 3-4 of his real digits (SDF
     space) plus elastic warp — his style, no actual scan. Writes INTO the
-    souvenir pack (web/assets/grandpere), replacing the pictured glyphs; run
+    souvenir pack (web/assets/souvenir), replacing the pictured glyphs; run
     `emit` instead to restore the real scans. Same stamp + watermark, and the
     same finishing touch (harmonize_ink) as the real pack, so the approved
     ink look carries over by construction.
@@ -88,7 +88,7 @@ def stage_synth(per_class=10, seed=7, targets=None):
         d = rng.standard_normal(field_shape).astype(np.float32)
         return cv2.GaussianBlur(d, (0, 0), sigma) * amp
 
-    manifest = {"name": "grandpere", "digits": {"given": {}, "user": {}}}
+    manifest = {"name": "souvenir", "digits": {"given": {}, "user": {}}}
     for role in ROLES:
         ink = np.float32(INK_TARGET[role])
         for d in range(1, 10):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""atelier — photos of the handwritten grids -> the grandpere asset pack.
+"""atelier — photos of the handwritten grids -> the souvenir asset pack.
 
 Stages (run in order; every output lands in originals/atelier-work/, gitignored):
 
@@ -7,7 +7,7 @@ Stages (run in order; every output lands in originals/atelier-work/, gitignored)
   sheet     contact sheets of unlabeled glyphs (for eyeball labeling)
   train     fit HOG+SVM on the labeled rows of meta.csv
   predict   label the rest with the SVM; write per-class sheets for verification
-  emit      normalized RGBA glyphs -> web/assets/grandpere/ + manifest.json
+  emit      normalized RGBA glyphs -> web/assets/souvenir/ + manifest.json
   review    open a curation matrix: every accepted glyph per class, indexed by
             id; emitted variants outlined green, pinned ones blue
   paper     pack paper.jpg (the game's background becomes his actual notebook
