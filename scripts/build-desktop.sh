@@ -92,15 +92,19 @@ touch web/src-tauri/src/lib.rs
 
 # updates are signed with the maintainer's key when it is present; a bare
 # clone has no key, so it simply builds without update artifacts
+# Update signing needs BOTH the key and its password. Releases are signed in
+# CI (which holds them as secrets), so a local build never has to: if either
+# is absent, build without update artifacts instead of failing. That lets the
+# password live only in a password manager, away from the key.
 BUNDLE_CONFIG=""
-if [ -f originals/atelier-work/updater.key ]; then
-  export TAURI_SIGNING_PRIVATE_KEY="$PWD/originals/atelier-work/updater.key"
-  [ -f originals/atelier-work/updater.key.password ] &&
-    export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat originals/atelier-work/updater.key.password)"
+KEY=originals/atelier-work/updater.key
+if [ -f "$KEY" ] && [ -f "$KEY.password" ]; then
+  export TAURI_SIGNING_PRIVATE_KEY="$PWD/$KEY"
+  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat "$KEY.password")"
   echo "== updates: signing with the maintainer key =="
 else
   BUNDLE_CONFIG='--config {"bundle":{"createUpdaterArtifacts":false}}'
-  echo "== updates: no signing key here — building without update artifacts =="
+  echo "== updates: no local signing key — building without update artifacts (CI signs releases) =="
 fi
 
 if [ "$(uname -s)" = Darwin ]; then
