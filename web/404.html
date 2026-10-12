@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>valvula check — a souvenir of sudokus</title>
+  <!--
+    Served by GitHub Pages for any path that is not the game. Deliberately
+    self-contained: no pack assets, no wasm, no stylesheet of its own — it is
+    served for URLs at any depth, where relative asset paths would break. The
+    paper here is drawn in CSS rather than loaded.
+  -->
+  <style>
+    :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a;
+            --ink-soft: rgba(26, 26, 26, 0.74); }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      /* squared paper, like the notebook the digits came from */
+      background-color: var(--paper);
+      background-image:
+        repeating-linear-gradient(to right, rgba(181, 39, 29, 0.10) 0 1px, transparent 1px 1.5rem),
+        repeating-linear-gradient(to bottom, rgba(181, 39, 29, 0.10) 0 1px, transparent 1px 1.5rem);
+      color: var(--ink);
+      font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1.2rem;
+    }
+    main { text-align: center; max-width: 30rem; }
+
+    /* the inspection: he looks the thing over, finds nothing, shrugs */
+    .checking { font-size: clamp(2.2rem, 11vw, 3.4rem); height: 1.6em;
+                display: flex; align-items: center; justify-content: center;
+                gap: 0.35em; }
+    .checking span { display: inline-block; animation: 2.4s ease-in-out infinite; }
+    .glass  { animation-name: sweep; }
+    .wrench { animation-name: tap; animation-delay: 0.2s; }
+    .gear   { animation-name: turn; animation-duration: 3.6s;
+              animation-timing-function: linear; }
+    .shrug  { animation-name: arrive; animation-delay: 0.9s;
+              animation-fill-mode: both; }
+    @keyframes sweep  { 0%, 100% { transform: translateX(-0.35em) rotate(-12deg); }
+                        50%      { transform: translateX(0.35em) rotate(12deg); } }
+    @keyframes tap    { 0%, 100% { transform: rotate(-18deg); }
+                        50%      { transform: rotate(14deg) translateY(0.06em); } }
+    @keyframes turn   { to { transform: rotate(360deg); } }
+    @keyframes arrive { 0%   { transform: translateY(0.5em) scale(0.6); opacity: 0; }
+                        60%  { transform: translateY(-0.1em) scale(1.06); opacity: 1; }
+                        100% { transform: none; opacity: 1; } }
+    /* a still frame for anyone who asked not to be moved */
+    @media (prefers-reduced-motion: reduce) {
+      .checking span { animation: none; }
+      .shrug { opacity: 1; }
+    }
+
+    h1 { font-size: clamp(1.5rem, 7vw, 2.1rem); color: var(--red);
+         margin: 0.6rem 0 0.2rem; font-weight: normal; letter-spacing: 0.01em; }
+    p { color: var(--ink-soft); margin: 0.5rem 0; line-height: 1.5; }
+    .tried { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+             font-size: 0.85rem; color: var(--ink-soft);
+             background: rgba(26, 26, 26, 0.05); border-radius: 0.3rem;
+             padding: 0.25rem 0.5rem; display: inline-block;
+             max-width: 100%; overflow-wrap: anywhere; }
+    a.home { display: inline-block; margin-top: 1.4rem; padding: 0.6rem 1.3rem;
+             border: 2px solid var(--red); border-radius: 0.4rem;
+             color: var(--red); text-decoration: none; font-size: 1.05rem;
+             background: rgba(247, 242, 232, 0.7); }
+    a.home:hover, a.home:focus { background: var(--red); color: var(--paper); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="checking" role="img" aria-label="checking">
+      <span class="glass">&#128269;</span>
+      <span class="wrench">&#128295;</span>
+      <span class="gear">&#9881;&#65039;</span>
+      <span class="shrug">&#129335;</span>
+    </div>
+    <h1>valvula check &#128521;&#8230;</h1>
+    <p id="line"></p>
+    <p><span class="tried" id="tried"></span></p>
+    <a class="home" id="home" href="/"></a>
+  </main>
+  <script>
+    // three languages, same as the game; the pun stays in Spanish everywhere
+    var L = {
+      en: { line: "nothing here. This grid was never drawn.",
+            back: "back to the sudokus" },
+      fr: { line: "rien ici. Cette grille n’a jamais été dessinée.",
+            back: "retour aux sudokus" },
+      es: { line: "nada por aquí. Esta cuadrícula nunca se dibujó.",
+            back: "volver a los sudokus" }
+    };
+    var t = L[(navigator.language || "en").slice(0, 2).toLowerCase()] || L.en;
+    document.getElementById("line").textContent = t.line;
+    // a bad path lands here directly; a bad query string is sent here by the
+    // game's own door check, which passes the URL it turned away
+    var sent = new URLSearchParams(location.search).get("tried");
+    document.getElementById("tried").textContent = sent || location.pathname;
+    // the game lives under the repo path on Pages, at the root everywhere else
+    var home = document.getElementById("home");
+    home.textContent = t.back;
+    home.href = location.hostname.endsWith("github.io") ? "/a-souvenir-of-sudokus/" : "/";
+    document.documentElement.lang = t === L.fr ? "fr" : t === L.es ? "es" : "en";
+  </script>
+</body>
+</html>

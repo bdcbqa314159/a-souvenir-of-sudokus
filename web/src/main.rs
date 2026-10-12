@@ -115,16 +115,16 @@ fn App() -> impl IntoView {
             }
             gloo_timers::future::TimeoutFuture::new(50).await;
         }
-        let candidates = match url_pack() {
-            Some(p) => vec![p],
-            // abuelo (real scans, family builds from the main machine) wins
-            // over souvenir (generated pack, committed to the public repo)
-            None => vec![
-                "assets/abuelo".into(),
-                "assets/souvenir".into(),
-                "assets/placeholder".into(),
-            ],
-        };
+        // abuelo (real scans, family builds from the main machine) wins over
+        // souvenir (generated pack, committed to the public repo). ?pack= only
+        // moves one to the front: a name that does not resolve falls through to
+        // the usual chain, so a URL cannot leave anyone on a packless page.
+        let mut candidates: Vec<String> = url_pack().into_iter().collect();
+        candidates.extend([
+            "assets/abuelo".into(),
+            "assets/souvenir".into(),
+            "assets/placeholder".into(),
+        ]);
         let mut loaded = false;
         for cand in candidates {
             if load_pack(cand, manifest).await {

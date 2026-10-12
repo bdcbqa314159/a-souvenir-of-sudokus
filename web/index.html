@@ -4,6 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>a-souvenir-of-sudokus</title>
+  <script>
+    // A URL nobody meant to type is a dead end. The game reads exactly two
+    // knobs from the query string; anything else means someone is trying the
+    // door handles, so they get the valvula page instead of the grid. Runs
+    // before the engine module loads, so there is no flash of the board.
+    (function () {
+      var known = ["pack", "dev"];
+      var q = location.search.replace(/^\?/, "");
+      var junk = q && q.split("&").some(function (kv) {
+        return kv && known.indexOf(kv.split("=")[0]) < 0;
+      });
+      if (junk) {
+        location.replace("404.html?tried=" +
+          encodeURIComponent(location.pathname + location.search));
+      }
+    })();
+  </script>
   <!-- PWA: installable ("Add to Home Screen") and playable offline -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#f7f2e8" />
@@ -13,6 +30,7 @@
   <link data-trunk rel="copy-file" href="../engine/build/wasm/souvenir.wasm" data-target-path="souvenir" />
   <link data-trunk rel="copy-dir" href="assets" />
   <link data-trunk rel="copy-file" href="manifest.webmanifest" />
+  <link data-trunk rel="copy-file" href="404.html" />
   <link data-trunk rel="copy-file" href="sw.js" />
   <link data-trunk rel="copy-dir" href="pwa" />
   <script type="module">
