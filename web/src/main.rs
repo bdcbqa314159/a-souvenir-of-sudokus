@@ -67,6 +67,30 @@ fn App() -> impl IntoView {
     let show_rules = RwSignal::new(false);
     let check_gen = RwSignal::new(0u64);
     let pack_switching = RwSignal::new(false);
+    // the game clock: accumulated milliseconds plus the moment the current
+    // stretch began. Time spent in another tab does not count — the player
+    // was not thinking about this grid.
+    let elapsed = RwSignal::new(0.0_f64);
+    let running_since: RwSignal<Option<f64>> = RwSignal::new(Some(js_sys::Date::now()));
+    let pause_clock = move || {
+        if let Some(t0) = running_since.get_untracked() {
+            elapsed.update(|e| *e += js_sys::Date::now() - t0);
+            running_since.set(None);
+        }
+    };
+    let resume_clock = move || {
+        if running_since.get_untracked().is_none() {
+            running_since.set(Some(js_sys::Date::now()));
+        }
+    };
+    // total time on this grid, live while it runs and frozen once it stops
+    let elapsed_ms = move || {
+        now.track();
+        elapsed.get()
+            + running_since
+                .get()
+                .map_or(0.0, |t0| js_sys::Date::now() - t0)
+    };
     // hangman mode: help is unlimited, but every answer draws one more stroke
     // of him; the sixth finishes the drawing and the game
     let strokes = RwSignal::new(0u32);
@@ -127,6 +151,9 @@ fn App() -> impl IntoView {
                 return false;
             }
             game.set(Some(s["game"].clone()));
+            // the clock resumes where it stopped, rather than starting over
+            elapsed.set(s["elapsed"].as_f64().unwrap_or(0.0).max(0.0));
+            running_since.set(Some(js_sys::Date::now()));
             hints_left.set(
                 s["hints"]
                     .as_u64()
@@ -195,6 +222,7 @@ fn App() -> impl IntoView {
             "game": g,
             "mode": match m { Mode::Phantom => "phantom", Mode::Hangman => "hangman", _ => "classic" },
             "strokes": strokes.get(),
+            "elapsed": elapsed_ms(),
             "lives": ph.lives.get(),
             "over": ph.over.get(),
             "hints": hints_left.get(),
@@ -202,6 +230,15 @@ fn App() -> impl IntoView {
         });
         if session_ready.get_untracked() {
             save_session(&blob);
+        }
+    });
+
+    // the clock stops when the grid is finished, and never restarts except
+    // with a new game. This must be an effect: inside the view it would have
+    // run once at construction and never again.
+    Effect::new(move |_| {
+        if game.get().as_ref().is_some_and(solved_game) {
+            pause_clock();
         }
     });
 
@@ -214,7 +251,10 @@ fn App() -> impl IntoView {
                 .ok()
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            if !hidden {
+            if hidden {
+                pause_clock();
+            } else {
+                resume_clock();
                 ph.last_progress.set(js_sys::Date::now());
                 ph.clear_haunt();
             }
@@ -327,6 +367,8 @@ fn App() -> impl IntoView {
             ph.reset();
             strokes.set(0);
             leave_arm.set(None);
+            elapsed.set(0.0);
+            running_since.set(Some(js_sys::Date::now()));
             hints_left.set(HINTS);
             checks_left.set(CHECKS);
             msg.set(Msg::NewGame(difficulty.clone()));
@@ -639,10 +681,13 @@ fn App() -> impl IntoView {
                 let board = board_of(&g, "board");
                 let filled = board.iter().filter(|v| **v != 0).count();
                 let diff = g["difficulty"].as_str().unwrap_or("medium").to_string();
+                let secs = (elapsed_ms() / 1000.0) as u64;
                 let mut s = format!(
-                    "{} · {filled}/81 · {}",
+                    "{} · {filled}/81 · {} · {:02}:{:02}",
                     diff_label(lang.get(), &diff),
-                    if pencil.get() { tr.pencil_mode } else { tr.pen }
+                    if pencil.get() { tr.pencil_mode } else { tr.pen },
+                    secs / 60,
+                    secs % 60
                 );
                 if dev {
                     s.push_str(" · dev");
