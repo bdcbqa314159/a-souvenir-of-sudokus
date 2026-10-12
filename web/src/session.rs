@@ -69,3 +69,22 @@ pub fn clear_history() {
         let _ = store.remove_item(HISTORY_KEY);
     }
 }
+
+/// Dev mode: `?dev` in the URL uncaps the assists and adds a solve button.
+/// Debug builds only — `trunk serve` is debug, while every path that reaches a
+/// player (GitHub Pages, CI, the desktop bundle) builds `--release`, so the
+/// query string alone cannot hand anyone a solved grid.
+pub fn dev_mode(query: &str) -> bool {
+    cfg!(debug_assertions) && query.contains("dev")
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dev_mode_needs_both_the_query_and_a_debug_build() {
+        assert!(!super::dev_mode("")); // no query, never
+        assert!(!super::dev_mode("?lang=fr"));
+        // the whole point: in a release build the query is not enough
+        assert_eq!(super::dev_mode("?dev"), cfg!(debug_assertions));
+    }
+}

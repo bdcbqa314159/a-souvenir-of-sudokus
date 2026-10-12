@@ -21,7 +21,7 @@ use engine::{board_of, cmd, solved_game, Manifest};
 use i18n::{detect_lang, diff_label, fill, save_lang, t, Lang, Mode, Msg};
 use pack::{digit_style, load_pack, pack, paper_store, sprite_url, url_pack};
 use phantom::{stall_ms, window_ms, Phantom, LIVES};
-use session::{clear_session, load_session, save_session};
+use session::{clear_session, dev_mode, load_session, save_session};
 
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if free
@@ -51,12 +51,10 @@ fn App() -> impl IntoView {
     let hints_left = RwSignal::new(HINTS);
     let checks_left = RwSignal::new(CHECKS);
     let leave_arm: RwSignal<Option<f64>> = RwSignal::new(None); // phantom exit confirm
-                                                                // dev mode (?dev in the URL): assists uncapped — the debugging use survives
-    let dev = window()
-        .location()
-        .search()
-        .unwrap_or_default()
-        .contains("dev");
+                                                                // dev mode (?dev in the URL): assists uncapped and a solve button. Only in
+                                                                // debug builds — `trunk serve` is debug, every shipped path (pages, CI,
+                                                                // tauri) is --release, so no player can hand themselves a solved grid.
+    let dev = dev_mode(&window().location().search().unwrap_or_default());
     let flip_anim = RwSignal::new(false);
     // classic/souvenir toggle: shown only when a souvenir pack exists;
     // remembers WHICH one loaded (abuelo or souvenir) as the toggle target
