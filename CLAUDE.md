@@ -49,6 +49,23 @@ with respect.
 - Watermark regression suite: `.venv/bin/python test_watermark.py` (key
   holder's machine only) — run after ANY change to the mark/verify code
 
+## Updates (desktop)
+
+The app checks GitHub for a newer release on launch and offers it in a
+dialog; the user chooses. Every payload is verified against the public key
+baked into the binary, so an unsigned or foreign-signed update is refused.
+
+- `originals/atelier-work/updater.key` (+ `.password`) is the **signing key**.
+  Gitignored, and mirrored as the `TAURI_SIGNING_PRIVATE_KEY` /
+  `..._PASSWORD` GitHub secrets so CI can sign releases. **Back it up with
+  the photos and `wm.key`: lose it and installed apps can never be updated
+  again** (they will reject anything signed by a different key).
+- The release workflow signs each bundle and publishes `latest.json`
+  (version + per-platform URL and signature) to the release; the app polls
+  `releases/latest/download/latest.json`.
+- A clone without the key still builds — `build-desktop.sh` then disables
+  update artifacts rather than failing.
+
 ## Known flakes & gotchas
 
 - The Tauri build sometimes fails its first run after asset changes

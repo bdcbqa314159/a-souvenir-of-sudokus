@@ -78,6 +78,11 @@ jobs:
           cmake --build engine/build/wasm -j
 
       - name: Build the app
+        env:
+          # updates are signed here; the matching public key is baked into the
+          # app, so an unsigned or foreign-signed payload can never install
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           cd web
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
@@ -97,13 +102,18 @@ jobs:
           case "${{ matrix.os }}" in
             macos-latest)
               app=$(ls -d "$B"/macos/*.app | head -1)
-              ditto -c -k --keepParent "$app" "$out/a-souvenir-of-sudokus-MACOS.zip" ;;
+              ditto -c -k --keepParent "$app" "$out/a-souvenir-of-sudokus-MACOS.zip"
+              # the updater consumes the .tar.gz the bundler signs
+              cp "$B"/macos/*.app.tar.gz "$out/" 2>/dev/null || true
+              cp "$B"/macos/*.app.tar.gz.sig "$out/" 2>/dev/null || true ;;
             windows-latest)
               exe=$(ls "$B"/nsis/*-setup.exe | head -1)
-              cp "$exe" "$out/a-souvenir-of-sudokus-WINDOWS-setup.exe" ;;
+              cp "$exe" "$out/a-souvenir-of-sudokus-WINDOWS-setup.exe"
+              cp "$exe.sig" "$out/a-souvenir-of-sudokus-WINDOWS-setup.exe.sig" 2>/dev/null || true ;;
             ubuntu-latest)
               img=$(ls "$B"/appimage/*.AppImage | head -1)
-              cp "$img" "$out/a-souvenir-of-sudokus-LINUX.AppImage" ;;
+              cp "$img" "$out/a-souvenir-of-sudokus-LINUX.AppImage"
+              cp "$img.sig" "$out/a-souvenir-of-sudokus-LINUX.AppImage.sig" 2>/dev/null || true ;;
           esac
           ls -la "$out"
           echo "dir=$out" >> "$GITHUB_OUTPUT"
@@ -122,6 +132,43 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ needs.draft.outputs.tag }}" "${{ steps.pack.outputs.dir }}"/* --clobber
+
+  manifest:
+    needs: [draft, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish latest.json (the signed update manifest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.draft.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p up && cd up
+          gh release download "$TAG" --pattern '*.sig' --clobber
+          base="https://github.com/$GH_REPO/releases/download/$TAG"
+          ver="${TAG#v}"
+          python3 - "$ver" "$base" <<'PY'
+          import json, pathlib, sys, urllib.parse
+          ver, base = sys.argv[1], sys.argv[2]
+          plat = {}
+          for sig in pathlib.Path(".").glob("*.sig"):
+              asset = sig.name[:-4]                     # strip .sig
+              key = ("windows-x86_64" if asset.endswith(".exe")
+                     else "linux-x86_64" if asset.endswith(".AppImage")
+                     else "darwin-aarch64" if asset.endswith(".tar.gz")
+                     else None)
+              if not key:
+                  continue
+              plat[key] = {"signature": sig.read_text().strip(),
+                           "url": f"{base}/{urllib.parse.quote(asset)}"}
+          if not plat:
+              raise SystemExit("no signed artifacts found — refusing to publish an empty manifest")
+          pathlib.Path("latest.json").write_text(json.dumps(
+              {"version": ver, "notes": "See the release notes.", "platforms": plat}, indent=2))
+          print(json.dumps(plat, indent=2))
+          PY
+          gh release upload "$TAG" latest.json --clobber
 
   checksums:
     needs: [draft, build]
