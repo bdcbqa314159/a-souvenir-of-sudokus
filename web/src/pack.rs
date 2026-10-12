@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use serde_json::Value;
 
 /// Asset pack resolution. ?pack=<name> in the URL always wins; otherwise the
-/// loader probes grandpere first (so the packaged desktop app opens straight
+/// loader probes souvenir first (so the packaged desktop app opens straight
 /// into his handwriting) and falls back to the placeholder. The loader sets
 /// the store before the first render reads it.
 pub fn pack_store() -> &'static std::sync::Mutex<Option<String>> {
@@ -186,13 +186,13 @@ mod tests {
     #[test]
     fn glyph_styling_covers_sprite_and_per_file_packs() {
         let man = manifest();
-        *pack_store().lock().unwrap() = Some("assets/grandpere".into());
+        *pack_store().lock().unwrap() = Some("assets/souvenir".into());
         *rev_store().lock().unwrap() = String::new();
         *sprite_store().lock().unwrap() = None;
 
         // per-file fallback (no sprite): a plain background image
         let s = digit_style(&man, "given", 1, 0).expect("style for a present digit");
-        assert!(s.contains("url('assets/grandpere/digits/given/1_s"), "{s}");
+        assert!(s.contains("url('assets/souvenir/digits/given/1_s"), "{s}");
         assert!(s.contains("background-size:contain"), "{s}");
         assert!(!s.contains('?'), "no rev means no cache-busting query: {s}");
 

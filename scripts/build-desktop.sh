@@ -60,11 +60,11 @@ if [ -d web/assets/abuelo ]; then
     echo "WARNING: web/assets/abuelo/ exists but is invalid — it will be ignored at runtime" >&2
   fi
 fi
-if n=$(check_pack web/assets/grandpere); then
+if n=$(check_pack web/assets/souvenir); then
   [ "$HAVE_ORIGINAL" = yes ] || echo "== pack: generated pack ($n glyphs) — public build =="
 else
   [ "$HAVE_ORIGINAL" = yes ] || {
-    echo "FATAL: no usable pack. web/assets/grandpere is missing or invalid (corrupted checkout?)" >&2
+    echo "FATAL: no usable pack. web/assets/souvenir is missing or invalid (corrupted checkout?)" >&2
     echo "       re-clone the repo, or run 'atelier/pipeline.py synth && genpaper' on the main machine." >&2
     exit 1
   }

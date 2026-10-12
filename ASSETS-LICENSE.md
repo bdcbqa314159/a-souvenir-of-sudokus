@@ -1,7 +1,7 @@
 # Asset license
 
 The digit glyphs and the notebook-paper background — everything under
-`web/assets/grandpere/` and baked into the released binaries — originate in
+`web/assets/souvenir/` and baked into the released binaries — originate in
 a family member's handwriting ("el abuelo"): the released glyphs are an
 original generated typeface derived from that handwriting (no glyph is a
 scan), and the paper is a page of his notebook. This notice covers both the

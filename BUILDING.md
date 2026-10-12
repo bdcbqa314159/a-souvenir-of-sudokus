@@ -61,6 +61,6 @@ gh release upload v0.1.0 souvenir-macos.zip
 
 Suggested naming: `a-souvenir-of-sudokus_<version>_<os>.<ext>`.
 
-The released binaries embed the grandpere pack; the assets are stamped and
+The released binaries embed the souvenir pack; the assets are stamped and
 watermarked (see ASSETS-LICENSE.md) and the binaries are scrubbed of personal
 paths (verify with `strings <binary> | grep -c "$HOME"` → 0).

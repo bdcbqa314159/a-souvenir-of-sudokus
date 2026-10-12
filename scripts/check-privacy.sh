@@ -16,7 +16,7 @@ done
 
 # 2. the only tracked raster assets are the generated pack + app icons;
 #    every pack glyph must carry the generator's naming (digit_sNN.png)
-bad_glyphs=$(git ls-files 'web/assets/grandpere/digits/*' | grep -vE '/[1-9]_s[0-9]{2}\.png$' || true)
+bad_glyphs=$(git ls-files 'web/assets/souvenir/digits/*' | grep -vE '/[1-9]_s[0-9]{2}\.png$' || true)
 [ -z "$bad_glyphs" ] || err "non-generated glyph naming in the pack: $bad_glyphs"
 photos=$(git ls-files '*.jpg' '*.jpeg' '*.JPG' '*.heic' '*.HEIC' || true)
 [ -z "$photos" ] || err "tracked photo-format files: $photos"

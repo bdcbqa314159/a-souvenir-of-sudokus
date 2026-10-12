@@ -1,9 +1,9 @@
 # atelier
 
-Photos of the original handwritten grids → the `grandpere` asset pack.
+Photos of the original handwritten grids → the `souvenir` asset pack.
 
 Everything personal stays out of git: `originals/` (the photos and all
-intermediate work) and `web/assets/grandpere/` (the derived glyphs) are
+intermediate work) and `web/assets/souvenir/` (the derived glyphs) are
 gitignored; publishing the pack is a deliberate decision, not a default.
 
 ## Setup
@@ -19,7 +19,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python pipeline.py sheet     # contact sheets for eyeball labeling
 .venv/bin/python pipeline.py label 0012=6 0013=1 0017=-1 ...   # 1-9, -1 = reject
 .venv/bin/python pipeline.py predict   # HOG-less SVM labels the rest; per-class sheets to verify
-.venv/bin/python pipeline.py emit      # RGBA glyphs + manifest -> web/assets/grandpere/
+.venv/bin/python pipeline.py emit      # RGBA glyphs + manifest -> web/assets/souvenir/
 ```
 
 Stages in detail:
@@ -36,7 +36,7 @@ Stages in detail:
   10 variants, pad square, soften the alpha, write 96×96 PNGs + manifest.json
   in the exact schema of `web/assets/placeholder/`.
 
-Play in his handwriting: `trunk serve` then open with `?pack=grandpere`.
+Play in his handwriting: `trunk serve` then open with `?pack=souvenir`.
 
 ## Curation
 
