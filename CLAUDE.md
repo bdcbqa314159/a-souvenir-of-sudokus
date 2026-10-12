@@ -56,10 +56,16 @@ dialog; the user chooses. Every payload is verified against the public key
 baked into the binary, so an unsigned or foreign-signed update is refused.
 
 - `originals/atelier-work/updater.key` (+ `.password`) is the **signing key**.
-  Gitignored, and mirrored as the `TAURI_SIGNING_PRIVATE_KEY` /
-  `..._PASSWORD` GitHub secrets so CI can sign releases. **Back it up with
-  the photos and `wm.key`: lose it and installed apps can never be updated
-  again** (they will reject anything signed by a different key).
+  The key file is encrypted with that password. Both are gitignored and
+  mirrored as the `TAURI_SIGNING_PRIVATE_KEY` / `..._PASSWORD` GitHub
+  secrets, which is how CI signs releases.
+  **Back them up — and back them up SEPARATELY**: the key with the photos and
+  `wm.key`, the password in a password manager. Together they can sign
+  updates for every installed copy; apart, neither is enough. Losing them
+  means installed apps can never be updated again (they reject anything
+  signed by a different key).
+  Only CI needs to sign, so the local password file is optional: delete it
+  and `build-desktop.sh` simply builds without update artifacts.
 - The release workflow signs each bundle and publishes `latest.json`
   (version + per-platform URL and signature) to the release; the app polls
   `releases/latest/download/latest.json`.
