@@ -17,7 +17,9 @@ self.addEventListener("fetch", (e) => {
         if (net.ok) cache.put(req, net.clone());
         return net;
       } catch (err) {
-        const hit = await cache.match(req);
+        // ignoreSearch: assets carry a ?v=<rev> query, and an exact match
+        // would miss every one of them when offline
+        const hit = (await cache.match(req)) || (await cache.match(req, { ignoreSearch: true }));
         if (hit) return hit;
         if (req.mode === "navigate") {
           const index = await cache.match("./") || await cache.match("index.html");

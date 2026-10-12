@@ -65,6 +65,8 @@ fn App() -> impl IntoView {
     // autosave arms only after restore has had its chance (see Effect below)
     let session_ready = RwSignal::new(false);
     let show_rules = RwSignal::new(false);
+    let check_gen = RwSignal::new(0u64);
+    let pack_switching = RwSignal::new(false);
     // hangman mode: help is unlimited, but every answer draws one more stroke
     // of him; the sixth finishes the drawing and the game
     let strokes = RwSignal::new(0u32);
@@ -147,6 +149,12 @@ fn App() -> impl IntoView {
                     .min(LIVES),
             );
             ph.over.set(s["over"].as_bool().unwrap_or(false));
+            if s["mode"] == "hangman" {
+                mode.set(Mode::Hangman);
+                // the drawing is the punishment: it must survive a reload,
+                // or one refresh forgives every mistake
+                strokes.set(s["strokes"].as_u64().unwrap_or(0).min(STROKES as u64) as u32);
+            }
             if s["mode"] == "phantom" {
                 mode.set(Mode::Phantom);
                 // re-anchor the stall clock: the pact resumes from NOW, a
@@ -174,10 +182,19 @@ fn App() -> impl IntoView {
     // saved session during startup.
     Effect::new(move |_| {
         let Some(g) = game.get() else { return };
+        // the effect runs AFTER the handler that solved the board, so clearing
+        // the slot inside play() was promptly undone here — clear it here
+        if solved_game(&g) {
+            if session_ready.get_untracked() {
+                clear_session();
+            }
+            return;
+        }
         let m = mode.get();
         let blob = json!({
             "game": g,
-            "mode": if m == Mode::Phantom { "phantom" } else { "classic" },
+            "mode": match m { Mode::Phantom => "phantom", Mode::Hangman => "hangman", _ => "classic" },
+            "strokes": strokes.get(),
             "lives": ph.lives.get(),
             "over": ph.over.get(),
             "hints": hints_left.get(),
@@ -187,6 +204,24 @@ fn App() -> impl IntoView {
             save_session(&blob);
         }
     });
+
+    // a hidden tab still runs this clock while the player is elsewhere, which
+    // silently cost three lives in four minutes. Coming back re-anchors it.
+    {
+        let ph = ph;
+        let handler = move |_: leptos::ev::Event| {
+            let hidden = js_sys::Reflect::get(&document(), &"hidden".into())
+                .ok()
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            if !hidden {
+                ph.last_progress.set(js_sys::Date::now());
+                ph.clear_haunt();
+            }
+        };
+        let _ = leptos::ev::visibilitychange;
+        window_event_listener(leptos::ev::visibilitychange, handler);
+    }
 
     // phantom clock: every 500ms refresh `now`; on stall expiry, the sudoku flips
     spawn_local(async move {
@@ -200,6 +235,7 @@ fn App() -> impl IntoView {
                 continue;
             };
             if solved_game(&g) {
+                ph.clear_haunt(); // the ghost must not outlive the win
                 continue; // solved — the phantoms lost
             }
             let diff = g["difficulty"].as_str().unwrap_or("medium").to_string();
@@ -290,6 +326,7 @@ fn App() -> impl IntoView {
             history.set(History::default());
             ph.reset();
             strokes.set(0);
+            leave_arm.set(None);
             hints_left.set(HINTS);
             checks_left.set(CHECKS);
             msg.set(Msg::NewGame(difficulty.clone()));
@@ -330,7 +367,9 @@ fn App() -> impl IntoView {
         if dev {
             return true;
         }
-        if mode.get_untracked() == Mode::Phantom {
+        // the rules text promises no hints and no checks in either mode;
+        // hiding the buttons was not enough, the keyboard still reached them
+        if matches!(mode.get_untracked(), Mode::Phantom | Mode::Hangman) {
             msg.set(Msg::NoAssist { hints });
             return false;
         }
@@ -342,6 +381,13 @@ fn App() -> impl IntoView {
     };
 
     let key_action = move |key: &str| {
+        // the overlay is modal: it was dealing new games behind itself
+        if show_rules.get_untracked() {
+            if key == "Escape" {
+                show_rules.set(false);
+            }
+            return;
+        }
         let i = selected.get_untracked();
         if ph.over.get_untracked() && key != "n" {
             return; // only a new game raises the dead
@@ -404,16 +450,31 @@ fn App() -> impl IntoView {
                     let n = rsp["wrong"].as_array().map(Vec::len).unwrap_or(0);
                     // two beats: the gauge reads, then it reports — a verdict
                     // that appears instantly reads as if nothing was checked
+                    // a generation token, not the message itself: an unrelated
+                    // message used to swallow the verdict, and a verdict could
+                    // land stale after the player fixed the cell meanwhile
+                    let gen = check_gen.get_untracked() + 1;
+                    check_gen.set(gen);
                     msg.set(Msg::Checking);
                     spawn_local(async move {
                         gloo_timers::future::TimeoutFuture::new(1300).await;
-                        if msg.get_untracked() == Msg::Checking {
-                            msg.set(if n == 0 {
-                                Msg::AllGood
-                            } else {
-                                Msg::WrongCells(n)
-                            });
+                        if check_gen.get_untracked() != gen {
+                            return; // superseded by a newer check
                         }
+                        // recount against the board as it stands now
+                        let n = game
+                            .get_untracked()
+                            .map(|g| {
+                                let b = board_of(&g, "board");
+                                let s = board_of(&g, "solution");
+                                (0..81).filter(|&i| b[i] != 0 && b[i] != s[i]).count()
+                            })
+                            .unwrap_or(n);
+                        msg.set(if n == 0 {
+                            Msg::AllGood
+                        } else {
+                            Msg::WrongCells(n)
+                        });
                     });
                 } else {
                     let err = rsp["error"].as_str().unwrap_or("engine error");
@@ -441,10 +502,17 @@ fn App() -> impl IntoView {
                 // digit, must never ward the phantom off.
                 // hangman mode interrogates every digit you place: right and
                 // he stays as he is, wrong and he draws one more stroke
-                if accepted && !mark && v != 0 && mode.get_untracked() == Mode::Hangman {
+                // `before != v` matters: without it, holding a wrong key draws
+                // ten strokes in a second, and undo-then-retype charges twice
+                if accepted
+                    && !mark
+                    && v != 0
+                    && before != v
+                    && mode.get_untracked() == Mode::Hangman
+                {
                     if let Some(g) = game.get_untracked() {
                         if board_of(&g, "solution")[i] != v {
-                            strokes.update(|s| *s += 1);
+                            strokes.update(|s| *s = (*s + 1).min(STROKES));
                             let left = STROKES.saturating_sub(strokes.get_untracked());
                             msg.set(if left == 0 {
                                 Msg::HangmanLost
@@ -669,6 +737,10 @@ fn App() -> impl IntoView {
         ph.last_progress.set(js_sys::Date::now());
     };
     let toggle_hangman = move |_: leptos::ev::MouseEvent| {
+        if ph.over.get_untracked() {
+            msg.set(Msg::Won); // the phantoms already took this grid
+            return;
+        }
         if mode.get_untracked() == Mode::Hangman {
             mode.set(Mode::Classic);
             msg.set(Msg::BackClassic);
@@ -713,7 +785,11 @@ fn App() -> impl IntoView {
         <h1>"a-souvenir-of-sudokus"</h1>
         <div class="board-row">
         <div class="grid" class:flipping=move || flip_anim.get() class:won=solved
-             class:lost=move || ph.over.get() || hangman_over()>{cells}</div>
+             class:lost=move || match mode.get() {
+                 Mode::Phantom => ph.over.get(),
+                 Mode::Hangman => hangman_over(),
+                 Mode::Classic => false,
+             }>{cells}</div>
         {move || (mode.get() == Mode::Hangman).then(|| view! {
             // he draws himself as he answers: gallows first, then head, body,
             // arms, legs — the sixth stroke finishes him and the grid
@@ -816,13 +892,20 @@ fn App() -> impl IntoView {
                 let on_souvenir = move || pack() != "assets/placeholder";
                 view! {
                     <button on:click=move |_| {
+                        // two quick clicks both read the not-yet-changed pack
+                        // and loaded the same one, leaving the label lying
+                        if pack_switching.get_untracked() {
+                            return;
+                        }
                         let target = if on_souvenir() {
                             "assets/placeholder".to_string()
                         } else {
                             souvenir_pack.get_untracked()
                         };
+                        pack_switching.set(true);
                         spawn_local(async move {
                             load_pack(target, manifest).await;
+                            pack_switching.set(false);
                         });
                     }>
                         {move || {
