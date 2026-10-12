@@ -18,7 +18,7 @@ mod phantom;
 mod session;
 
 use engine::{board_of, cmd, solved_game, Manifest};
-use i18n::{detect_lang, diff_label, fill, save_lang, t, translate_engine_error, Lang, Mode};
+use i18n::{detect_lang, diff_label, fill, save_lang, t, Lang, Mode, Msg};
 use pack::{digit_style, load_pack, pack, paper_store, sprite_url, url_pack};
 use phantom::{stall_ms, window_ms, Phantom, LIVES};
 use session::{clear_session, load_session, save_session};
@@ -40,7 +40,7 @@ fn App() -> impl IntoView {
     let manifest: RwSignal<Option<Manifest>> = RwSignal::new(None);
     let selected = RwSignal::new(40usize);
     let pencil = RwSignal::new(false);
-    let msg = RwSignal::new(String::new());
+    let msg = RwSignal::new(Msg::None);
     let history = RwSignal::new(History::default());
     let lang = RwSignal::new(detect_lang());
     let mode = RwSignal::new(Mode::Classic);
@@ -96,7 +96,7 @@ fn App() -> impl IntoView {
             }
         }
         if !loaded {
-            msg.set(t(lang.get_untracked()).no_pack.into());
+            msg.set(Msg::NoPack);
         }
         if pack() != "assets/placeholder" {
             souvenir_pack.set(pack());
@@ -155,7 +155,9 @@ fn App() -> impl IntoView {
             if rsp["ok"].as_bool() == Some(true) {
                 game.set(Some(rsp["game"].clone()));
             } else {
-                msg.set(rsp["error"].as_str().unwrap_or("engine error").to_string());
+                msg.set(Msg::Engine(
+                    rsp["error"].as_str().unwrap_or("engine error").to_string(),
+                ));
             }
         }
         session_ready.set(true);
@@ -207,7 +209,7 @@ fn App() -> impl IntoView {
                             ph.incoming.set(Some(rsp["game"].clone()));
                             ph.haunt_start.set(Some(js_sys::Date::now()));
                             let secs = ((window_ms(&diff) / 1000.0) as u64).to_string();
-                            msg.set(fill(t(lang.get_untracked()).coming, &secs));
+                            msg.set(Msg::Coming(secs.parse().unwrap_or(0)));
                         }
                     }
                     continue;
@@ -238,12 +240,9 @@ fn App() -> impl IntoView {
                 ph.lives.update(|l| *l = l.saturating_sub(1));
                 if ph.lives.get_untracked() == 0 {
                     ph.over.set(true);
-                    msg.set(t(lang.get_untracked()).won.into());
+                    msg.set(Msg::Won);
                 } else {
-                    msg.set(fill(
-                        t(lang.get_untracked()).phantomed,
-                        &ph.lives.get_untracked().to_string(),
-                    ));
+                    msg.set(Msg::Phantomed(ph.lives.get_untracked()));
                 }
             }
         }
@@ -254,7 +253,7 @@ fn App() -> impl IntoView {
     // rejected command as if something happened.
     let play = move |req: Value| -> bool {
         let Some(g) = game.get_untracked() else {
-            msg.set(t(lang.get_untracked()).engine_loading.into());
+            msg.set(Msg::EngineLoading);
             return false;
         };
         let mut full = req;
@@ -267,13 +266,13 @@ fn App() -> impl IntoView {
             });
             game.set(Some(rsp["game"].clone()));
             if rsp["solved"].as_bool() == Some(true) {
-                msg.set(t(lang.get_untracked()).solved.into());
+                msg.set(Msg::Solved);
                 clear_session(); // a solved game is not worth resuming
             }
             true
         } else {
             let err = rsp["error"].as_str().unwrap_or("engine error");
-            msg.set(translate_engine_error(lang.get_untracked(), err));
+            msg.set(Msg::Engine(err.to_string()));
             false
         }
     };
@@ -286,11 +285,10 @@ fn App() -> impl IntoView {
             ph.reset();
             hints_left.set(HINTS);
             checks_left.set(CHECKS);
-            let l = lang.get_untracked();
-            msg.set(fill(t(l).new_game_msg, diff_label(l, &difficulty)));
+            msg.set(Msg::NewGame(difficulty.clone()));
         } else {
             let err = rsp["error"].as_str().unwrap_or("engine error");
-            msg.set(translate_engine_error(lang.get_untracked(), err));
+            msg.set(Msg::Engine(err.to_string()));
         }
     };
 
@@ -302,7 +300,7 @@ fn App() -> impl IntoView {
                 }
                 game.set(Some(prev));
             } else {
-                msg.set(t(lang.get_untracked()).nothing_undo.into());
+                msg.set(Msg::NothingUndo);
             }
         });
     };
@@ -314,7 +312,7 @@ fn App() -> impl IntoView {
                 }
                 game.set(Some(next));
             } else {
-                msg.set(t(lang.get_untracked()).nothing_redo.into());
+                msg.set(Msg::NothingRedo);
             }
         });
     };
@@ -325,14 +323,12 @@ fn App() -> impl IntoView {
         if dev {
             return true;
         }
-        let tr = t(lang.get_untracked());
-        let noun = if hints { tr.hints_noun } else { tr.checks_noun };
         if mode.get_untracked() == Mode::Phantom {
-            msg.set(fill(tr.no_assist_phantom, noun));
+            msg.set(Msg::NoAssist { hints });
             return false;
         }
         if left.get_untracked() == 0 {
-            msg.set(fill(tr.none_left, noun));
+            msg.set(Msg::NoneLeft { hints });
             return false;
         }
         true
@@ -388,26 +384,33 @@ fn App() -> impl IntoView {
                     return;
                 }
                 let Some(g) = game.get_untracked() else {
-                    msg.set(t(lang.get_untracked()).engine_loading.into());
+                    msg.set(Msg::EngineLoading);
                     return;
                 };
                 let mut req = json!({"cmd": "check"});
                 req["game"] = g;
                 let rsp = cmd(req);
-                let tr = t(lang.get_untracked());
                 if rsp["ok"].as_bool() == Some(true) {
                     if !dev {
                         checks_left.update(|c| *c -= 1);
                     }
                     let n = rsp["wrong"].as_array().map(Vec::len).unwrap_or(0);
-                    msg.set(if n == 0 {
-                        tr.all_good.into()
-                    } else {
-                        fill(tr.wrong_cells, &n.to_string())
+                    // two beats: the gauge reads, then it reports — a verdict
+                    // that appears instantly reads as if nothing was checked
+                    msg.set(Msg::Checking);
+                    spawn_local(async move {
+                        gloo_timers::future::TimeoutFuture::new(1300).await;
+                        if msg.get_untracked() == Msg::Checking {
+                            msg.set(if n == 0 {
+                                Msg::AllGood
+                            } else {
+                                Msg::WrongCells(n)
+                            });
+                        }
                     });
                 } else {
                     let err = rsp["error"].as_str().unwrap_or("engine error");
-                    msg.set(translate_engine_error(lang.get_untracked(), err));
+                    msg.set(Msg::Engine(err.to_string()));
                 }
             }
             "n" => {
@@ -435,7 +438,7 @@ fn App() -> impl IntoView {
                             ph.last_progress.set(js_sys::Date::now());
                             if ph.haunt_start.get_untracked().is_some() {
                                 ph.clear_haunt();
-                                msg.set(t(lang.get_untracked()).recedes.into());
+                                msg.set(Msg::Recedes);
                             }
                         }
                     }
@@ -556,6 +559,12 @@ fn App() -> impl IntoView {
                 }
                 if mode.get() == Mode::Phantom {
                     let hearts = "♥".repeat(ph.lives.get() as usize);
+                    // a finished board has nothing left to haunt: the engine
+                    // already stops flipping it, so stop counting at it too
+                    if solved_game(&g) || ph.over.get() {
+                        s.push_str(&format!(" · {hearts}"));
+                        return s;
+                    }
                     match ph.haunt_start.get() {
                         Some(t0) => {
                             let remain = ((window_ms(&diff) - (now.get() - t0)) / 1000.0).max(0.0);
@@ -614,9 +623,8 @@ fn App() -> impl IntoView {
     // Lives and game-over persist for the whole game: toggling modes must never
     // resurrect a lost run (only `n` does).
     let toggle_phantom = move |_| {
-        let tr = t(lang.get_untracked());
         if ph.over.get_untracked() {
-            msg.set(tr.won.into());
+            msg.set(Msg::Won);
             return;
         }
         if mode.get_untracked() == Mode::Phantom {
@@ -625,14 +633,14 @@ fn App() -> impl IntoView {
                 .is_some_and(|t| js_sys::Date::now() - t < 3_000.0);
             if !armed_recently {
                 leave_arm.set(Some(js_sys::Date::now()));
-                msg.set(tr.leave_confirm.into());
+                msg.set(Msg::LeaveConfirm);
                 return;
             }
             mode.set(Mode::Classic);
-            msg.set(tr.back_classic.into());
+            msg.set(Msg::BackClassic);
         } else {
             mode.set(Mode::Phantom);
-            msg.set(tr.phantom_on.into());
+            msg.set(Msg::PhantomOn);
         }
         leave_arm.set(None);
         ph.clear_haunt();
@@ -662,12 +670,25 @@ fn App() -> impl IntoView {
                     on:error=move |_| sprite_ok.set(true) /> })}
             }
         }}
-        <div class="app" class:ready=ready>
+        // the page itself carries the mode: phantom cools the room
+        <div class="app" class:ready=ready class:phantom=move || mode.get() == Mode::Phantom>
         <h1>"a-souvenir-of-sudokus"</h1>
-        <div class="grid" class:flipping=move || flip_anim.get()>{cells}</div>
+        <div class="grid" class:flipping=move || flip_anim.get() class:won=solved
+             class:lost=move || ph.over.get()>{cells}</div>
         <div class="bar palette">
             {palette}
-            <button class="digit erase" title=move || t(lang.get()).erase on:click=move |_| key_action("x")>"⌫"</button>
+            // a drawn eraser, not a backspace arrow: this rubs the cell out,
+            // it is not the undo of a keystroke
+            <button class="digit erase tipped" attr:aria-label=move || t(lang.get()).erase
+                    on:click=move |_| key_action("x")>
+                <span class="tip">{move || t(lang.get()).erase}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15.1 4.9 19.1 8.9a1.4 1.4 0 0 1 0 2l-7.1 7.1a1.4 1.4 0 0 1-2 0L6 14a1.4 1.4 0 0 1 0-2l7.1-7.1a1.4 1.4 0 0 1 2 0Z"/>
+                    <path d="M10.3 8.7 15.3 13.7"/>
+                    <path d="M9.6 20h10.2" opacity="0.55"/>
+                </svg>
+            </button>
         </div>
         <div class="bar">
             <button class:on=move || pencil.get() on:click=move |_| key_action("m")>
@@ -765,9 +786,16 @@ fn App() -> impl IntoView {
                     })
                     .collect::<Vec<_>>()}
             </span>
-            <button title=move || t(lang.get()).rules_btn on:click=move |_| show_rules.set(true)>"?"</button>
+            <button class="tipped" attr:aria-label=move || t(lang.get()).rules_btn
+                on:click=move |_| show_rules.set(true)>
+                <span class="tip">{move || t(lang.get()).rules_btn}</span>
+                "?"
+            </button>
         </div>
-        <div class="msg" class:solved=solved>{move || msg.get()}</div>
+        <div class="msg" class:solved=solved class:lost-msg=move || ph.over.get()
+             class:verdict-reading=move || msg.get() == Msg::Checking
+             class:verdict-good=move || msg.get() == Msg::AllGood
+             class:verdict-bad=move || matches!(msg.get(), Msg::WrongCells(_))>{move || msg.get().text(lang.get())}</div>
         <div class="status">{status}</div>
         </div>
         {move || show_rules.get().then(|| view! {
@@ -778,6 +806,21 @@ fn App() -> impl IntoView {
                     <p>{move || t(lang.get()).rules_classic}</p>
                     <h2>{move || t(lang.get()).phantom}</h2>
                     <p>{move || t(lang.get()).rules_phantom}</p>
+                    // the buttons, named with the very words printed on them
+                    <h2>{move || t(lang.get()).rules_controls}</h2>
+                    <dl class="controls">
+                        <dt>"1 – 9"</dt><dd>{move || t(lang.get()).ctl_digits}</dd>
+                        <dt>{move || t(lang.get()).erase}</dt><dd>{move || t(lang.get()).ctl_erase}</dd>
+                        <dt>{move || t(lang.get()).pencil}</dt><dd>{move || t(lang.get()).ctl_pencil}</dd>
+                        <dt>{move || t(lang.get()).hint}</dt><dd>{move || t(lang.get()).ctl_hint}</dd>
+                        <dt>{move || t(lang.get()).check}</dt><dd>{move || t(lang.get()).ctl_check}</dd>
+                        <dt>{move || format!("{} · {}", t(lang.get()).undo, t(lang.get()).redo)}</dt>
+                        <dd>{move || t(lang.get()).ctl_undo}</dd>
+                        <dt>{move || t(lang.get()).new_game}</dt><dd>{move || t(lang.get()).ctl_new}</dd>
+                        <dt>{move || t(lang.get()).phantom}</dt><dd>{move || t(lang.get()).ctl_phantom}</dd>
+                        <dt>{move || format!("souvenir · {}", t(lang.get()).classic)}</dt>
+                        <dd>{move || t(lang.get()).ctl_pack}</dd>
+                    </dl>
                     <button on:click=move |_| show_rules.set(false)>{move || t(lang.get()).close}</button>
                 </div>
             </div>

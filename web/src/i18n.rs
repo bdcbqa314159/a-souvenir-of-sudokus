@@ -2,6 +2,83 @@
 //! detection and persistence. "el abuelo" stays el abuelo everywhere.
 use leptos::prelude::window;
 
+/// A message as an EVENT, not as finished text: the words are produced at
+/// render time from the language in force then, so switching language
+/// retranslates what is already on screen (it used to freeze in whatever
+/// language was current when the event happened).
+#[derive(Clone, PartialEq)]
+pub enum Msg {
+    None,
+    NoPack,
+    EngineLoading,
+    Solved,
+    Checking,
+    AllGood,
+    WrongCells(usize),
+    NewGame(String),
+    NoAssist {
+        hints: bool,
+    },
+    NoneLeft {
+        hints: bool,
+    },
+    NothingUndo,
+    NothingRedo,
+    Coming(u64),
+    Recedes,
+    Phantomed(u32),
+    Won,
+    LeaveConfirm,
+    BackClassic,
+    PhantomOn,
+    /// a raw error string from the engine, translated when rendered
+    Engine(String),
+}
+
+impl Msg {
+    pub fn text(&self, lang: Lang) -> String {
+        let tr = t(lang);
+        match self {
+            Msg::None => String::new(),
+            Msg::NoPack => tr.no_pack.into(),
+            Msg::EngineLoading => tr.engine_loading.into(),
+            Msg::Solved => tr.solved.into(),
+            // a verdict should be readable before the words are: the mark
+            // carries it in any language
+            Msg::Checking => "valvula check \u{1F609}\u{2026}".into(),
+            Msg::AllGood => format!("\u{2713} {}", tr.all_good),
+            Msg::WrongCells(n) => format!("\u{2717} {}", fill(tr.wrong_cells, &n.to_string())),
+            Msg::NewGame(d) => fill(tr.new_game_msg, diff_label(lang, d)),
+            Msg::NoAssist { hints } => fill(
+                tr.no_assist_phantom,
+                if *hints {
+                    tr.hints_noun
+                } else {
+                    tr.checks_noun
+                },
+            ),
+            Msg::NoneLeft { hints } => fill(
+                tr.none_left,
+                if *hints {
+                    tr.hints_noun
+                } else {
+                    tr.checks_noun
+                },
+            ),
+            Msg::NothingUndo => tr.nothing_undo.into(),
+            Msg::NothingRedo => tr.nothing_redo.into(),
+            Msg::Coming(secs) => fill(tr.coming, &secs.to_string()),
+            Msg::Recedes => tr.recedes.into(),
+            Msg::Phantomed(lives) => fill(tr.phantomed, &lives.to_string()),
+            Msg::Won => tr.won.into(),
+            Msg::LeaveConfirm => tr.leave_confirm.into(),
+            Msg::BackClassic => tr.back_classic.into(),
+            Msg::PhantomOn => tr.phantom_on.into(),
+            Msg::Engine(e) => translate_engine_error(lang, e),
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Classic,
@@ -61,6 +138,16 @@ pub struct T {
     pub rules_classic: &'static str,
     pub rules_phantom: &'static str,
     pub close: &'static str,
+    pub rules_controls: &'static str,
+    pub ctl_digits: &'static str,
+    pub ctl_erase: &'static str,
+    pub ctl_pencil: &'static str,
+    pub ctl_hint: &'static str,
+    pub ctl_check: &'static str,
+    pub ctl_undo: &'static str,
+    pub ctl_new: &'static str,
+    pub ctl_phantom: &'static str,
+    pub ctl_pack: &'static str,
 }
 
 pub const EN: T = T {
@@ -91,7 +178,7 @@ pub const EN: T = T {
     coming: "the phantom is coming — place a correct number within {}s to hold it off",
     recedes: "the phantom recedes…",
     phantomed: "the sudoku phantomed — {} live(s) left",
-    won: "the phantoms won — n for a new game",
+    won: "the phantoms won — press N for a new game",
     leave_confirm: "leave phantom mode? click phantom again to confirm",
     back_classic: "back to classic",
     phantom_on: "phantom mode — keep placing right, or the sudoku flips",
@@ -107,6 +194,16 @@ pub const EN: T = T {
     rules_classic: "Fill the grid so that every row, every column and every 3\u{d7}3 box holds the digits 1 to 9, each exactly once. The black digits are given \u{2014} they were always there. Tap a cell, then a digit from the palette, to write in red; the pencil leaves small marks while you think. You have 3 hints and 3 checks per game \u{2014} spend them wisely.",
     rules_phantom: "Phantom mode is a pact with the clock: keep placing correct digits, and the page stays yours. Stall too long and the haunting begins \u{2014} another grid fades in over the board. Place a correct digit before it settles to ward it off; fail, and the sudoku flips into its phantom: your correct work survives, but the puzzle reshapes around it. Three lives per game, no hints, no checks \u{2014} trust your hand.",
     close: "close",
+    rules_controls: "the buttons",
+    ctl_digits: "tap a cell, then a digit \u{2014} it is written in his hand, in red.",
+    ctl_erase: "rubs the chosen cell out: its digit, or its pencil marks.",
+    ctl_pencil: "pencil mode \u{2014} digits land as small notes instead of an answer. Tap the same digit again to take a note back.",
+    ctl_hint: "fills one correct cell for you. Three per game, none in phantom mode.",
+    ctl_check: "marks which of your digits are wrong. Three per game, none in phantom mode.",
+    ctl_undo: "step back and forward through your own moves.",
+    ctl_new: "deals a fresh grid \u{2014} easy, medium or hard, graded by the techniques it needs.",
+    ctl_phantom: "enters (or leaves) the pact with the clock described above.",
+    ctl_pack: "switches between his handwriting and plain printed digits.",
 };
 
 pub const FR: T = T {
@@ -137,7 +234,7 @@ pub const FR: T = T {
     coming: "le fantôme arrive — place un chiffre juste en {}s pour le repousser",
     recedes: "le fantôme recule…",
     phantomed: "le sudoku s'est fantômé — {} vie(s) restante(s)",
-    won: "les fantômes ont gagné — n pour une nouvelle partie",
+    won: "les fantômes ont gagné — appuie sur N pour une nouvelle partie",
     leave_confirm: "quitter le mode fantôme ? clique encore pour confirmer",
     back_classic: "retour au classique",
     phantom_on: "mode fantôme — continue à jouer juste, ou le sudoku bascule",
@@ -153,6 +250,16 @@ pub const FR: T = T {
     rules_classic: "Remplis la grille pour que chaque ligne, chaque colonne et chaque carr\u{e9} 3\u{d7}3 contiennent les chiffres de 1 \u{e0} 9, une seule fois chacun. Les chiffres noirs sont donn\u{e9}s \u{2014} ils ont toujours \u{e9}t\u{e9} l\u{e0}. Touche une case puis un chiffre de la palette pour \u{e9}crire en rouge ; le crayon pose de petites notes pendant que tu r\u{e9}fl\u{e9}chis. Tu as 3 indices et 3 v\u{e9}rifications par partie \u{2014} d\u{e9}pense-les avec sagesse.",
     rules_phantom: "Le mode fant\u{f4}me est un pacte avec l'horloge : continue \u{e0} placer des chiffres justes, et la page reste \u{e0} toi. Tarde trop et la hantise commence \u{2014} une autre grille appara\u{ee}t en transparence sur la tienne. Place un chiffre juste avant qu'elle ne s'installe pour la repousser ; sinon, le sudoku bascule en son fant\u{f4}me : ton travail juste survit, mais l'\u{e9}nigme se recompose autour. Trois vies par partie, sans indices ni v\u{e9}rifications \u{2014} fie-toi \u{e0} ta main.",
     close: "fermer",
+    rules_controls: "les boutons",
+    ctl_digits: "touche une case, puis un chiffre \u{2014} il s'\u{e9}crit de sa main, en rouge.",
+    ctl_erase: "efface la case choisie : son chiffre, ou ses notes au crayon.",
+    ctl_pencil: "mode crayon \u{2014} les chiffres se posent en petites notes au lieu d'une r\u{e9}ponse. Retouche le m\u{ea}me chiffre pour retirer la note.",
+    ctl_hint: "remplit une case juste pour toi. Trois par partie, aucune en mode fant\u{f4}me.",
+    ctl_check: "signale ceux de tes chiffres qui sont faux. Trois par partie, aucune en mode fant\u{f4}me.",
+    ctl_undo: "reviens en arri\u{e8}re et en avant dans tes propres coups.",
+    ctl_new: "distribue une nouvelle grille \u{2014} facile, moyen ou difficile, selon les techniques qu'elle exige.",
+    ctl_phantom: "entre (ou sort) du pacte avec l'horloge d\u{e9}crit plus haut.",
+    ctl_pack: "bascule entre son \u{e9}criture et des chiffres imprim\u{e9}s.",
 };
 
 pub const ES: T = T {
@@ -183,7 +290,7 @@ pub const ES: T = T {
     coming: "el fantasma viene — coloca una cifra correcta en {}s para contenerlo",
     recedes: "el fantasma retrocede…",
     phantomed: "el sudoku se esfumó — {} vida(s) restante(s)",
-    won: "los fantasmas ganaron — n para una nueva partida",
+    won: "los fantasmas ganaron — pulsa N para una nueva partida",
     leave_confirm: "¿salir del modo fantasma? haz clic de nuevo para confirmar",
     back_classic: "de vuelta al clásico",
     phantom_on: "modo fantasma — sigue acertando o el sudoku se transforma",
@@ -199,6 +306,16 @@ pub const ES: T = T {
     rules_classic: "Rellena la cuadr\u{ed}cula para que cada fila, cada columna y cada caja de 3\u{d7}3 contengan los d\u{ed}gitos del 1 al 9, una sola vez cada uno. Los d\u{ed}gitos negros vienen dados \u{2014} siempre estuvieron ah\u{ed}. Toca una celda y luego un d\u{ed}gito de la paleta para escribir en rojo; el l\u{e1}piz deja peque\u{f1}as notas mientras piensas. Tienes 3 pistas y 3 comprobaciones por partida \u{2014} g\u{e1}stalas con cabeza.",
     rules_phantom: "El modo fantasma es un pacto con el reloj: sigue colocando d\u{ed}gitos correctos y la p\u{e1}gina seguir\u{e1} siendo tuya. Si tardas demasiado, empieza el embrujo \u{2014} otra cuadr\u{ed}cula se trasluce sobre la tuya. Coloca un d\u{ed}gito correcto antes de que se asiente para ahuyentarla; si no, el sudoku se convierte en su fantasma: tu trabajo correcto sobrevive, pero el enigma se recompone a su alrededor. Tres vidas por partida, sin pistas ni comprobaciones \u{2014} conf\u{ed}a en tu mano.",
     close: "cerrar",
+    rules_controls: "los botones",
+    ctl_digits: "toca una celda y luego un d\u{ed}gito \u{2014} se escribe de su pu\u{f1}o y letra, en rojo.",
+    ctl_erase: "borra la celda elegida: su d\u{ed}gito o sus notas a l\u{e1}piz.",
+    ctl_pencil: "modo l\u{e1}piz \u{2014} los d\u{ed}gitos se anotan en peque\u{f1}o en vez de ser una respuesta. Toca el mismo d\u{ed}gito otra vez para quitar la nota.",
+    ctl_hint: "rellena una celda correcta por ti. Tres por partida, ninguna en modo fantasma.",
+    ctl_check: "se\u{f1}ala cu\u{e1}les de tus d\u{ed}gitos est\u{e1}n mal. Tres por partida, ninguna en modo fantasma.",
+    ctl_undo: "retrocede y avanza por tus propias jugadas.",
+    ctl_new: "reparte una cuadr\u{ed}cula nueva \u{2014} f\u{e1}cil, medio o dif\u{ed}cil, seg\u{fa}n las t\u{e9}cnicas que exige.",
+    ctl_phantom: "entra (o sale) del pacto con el reloj descrito arriba.",
+    ctl_pack: "alterna entre su escritura y d\u{ed}gitos impresos.",
 };
 
 pub fn t(lang: Lang) -> &'static T {
