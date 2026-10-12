@@ -44,3 +44,6 @@ web/src-tauri/gen/
 .cargo/
 web/assets/abuelo/
 .dev-certs/
+
+# the updater's signing key — losing it means never updating installed apps
+originals/atelier-work/updater.key*

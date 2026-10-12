@@ -90,6 +90,19 @@ command -v cargo-tauri >/dev/null || cargo install tauri-cli --locked
 rm -rf web/dist
 touch web/src-tauri/src/lib.rs
 
+# updates are signed with the maintainer's key when it is present; a bare
+# clone has no key, so it simply builds without update artifacts
+BUNDLE_CONFIG=""
+if [ -f originals/atelier-work/updater.key ]; then
+  export TAURI_SIGNING_PRIVATE_KEY="$PWD/originals/atelier-work/updater.key"
+  [ -f originals/atelier-work/updater.key.password ] &&
+    export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(cat originals/atelier-work/updater.key.password)"
+  echo "== updates: signing with the maintainer key =="
+else
+  BUNDLE_CONFIG='--config {"bundle":{"createUpdaterArtifacts":false}}'
+  echo "== updates: no signing key here — building without update artifacts =="
+fi
+
 if [ "$(uname -s)" = Darwin ]; then
   # dmg bundling needs an interactive terminal; the shipped artifact is the
   # zipped .app anyway (BUILDING.md)
@@ -99,9 +112,9 @@ else
 fi
 # tauri's asset scan flakes on the first build after pack files changed;
 # one retry with a forced macro re-eval reliably clears it
-(cd web && cargo tauri build $BUNDLE_ARGS) || {
+(cd web && cargo tauri build $BUNDLE_ARGS $BUNDLE_CONFIG) || {
   touch web/src-tauri/src/lib.rs
-  (cd web && cargo tauri build $BUNDLE_ARGS)
+  (cd web && cargo tauri build $BUNDLE_ARGS $BUNDLE_CONFIG)
 }
 
 echo
