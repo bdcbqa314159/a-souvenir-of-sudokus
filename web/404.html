@@ -96,7 +96,12 @@
     // a bad path lands here directly; a bad query string is sent here by the
     // game's own door check, which passes the URL it turned away
     var sent = new URLSearchParams(location.search).get("tried");
-    document.getElementById("tried").textContent = sent || location.pathname;
+    var tried = sent || location.pathname;
+    // whatever was in the bar is shown as text (never markup), and only the
+    // first eighty characters of it — a kilometre-long URL is still just a
+    // wrong turn, and should not become the page
+    document.getElementById("tried").textContent =
+      tried.length > 80 ? tried.slice(0, 80) + "…" : tried;
     // the game lives under the repo path on Pages, at the root everywhere else
     var home = document.getElementById("home");
     home.textContent = t.back;

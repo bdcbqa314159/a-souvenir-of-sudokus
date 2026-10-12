@@ -5,19 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>a-souvenir-of-sudokus</title>
   <script>
-    // A URL nobody meant to type is a dead end. The game reads exactly two
-    // knobs from the query string; anything else means someone is trying the
-    // door handles, so they get the valvula page instead of the grid. Runs
-    // before the engine module loads, so there is no flash of the board.
+    // A URL nobody meant to type is a dead end. The game lives at the site
+    // root and reads exactly two knobs from the query string — any other path
+    // or parameter means someone is trying the door handles, and gets the
+    // valvula page instead of the grid. GitHub Pages already answers unknown
+    // paths with 404.html; this is the same answer on any host that falls back
+    // to index.html instead (trunk's dev server does, and so does the service
+    // worker offline). It runs before the engine module loads, so no board
+    // flashes first.
     (function () {
+      var p = location.pathname, q = location.search.replace(/^\?/, "");
+      // the packaged app serves itself from its own protocol (tauri://, or
+      // http://tauri.localhost on Windows) — leave the webview alone
+      var web = (location.protocol === "http:" || location.protocol === "https:") &&
+                location.hostname !== "tauri.localhost";
+      var strayPath = web && !(p.endsWith("/") || p.endsWith("/index.html"));
       var known = ["pack", "dev"];
-      var q = location.search.replace(/^\?/, "");
-      var junk = q && q.split("&").some(function (kv) {
+      var strayQuery = !!q && q.split("&").some(function (kv) {
         return kv && known.indexOf(kv.split("=")[0]) < 0;
       });
-      if (junk) {
-        location.replace("404.html?tried=" +
-          encodeURIComponent(location.pathname + location.search));
+      // never bounce the valvula page at itself, however it came to be served
+      if ((strayPath || strayQuery) && !p.endsWith("404.html")) {
+        var seg = p.split("/")[1];
+        // project pages live under /<repo>/; everywhere else the root is /
+        var root = location.hostname.endsWith("github.io") && seg ? "/" + seg + "/" : "/";
+        location.replace(root + "404.html?tried=" + encodeURIComponent(p + location.search));
       }
     })();
   </script>

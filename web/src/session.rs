@@ -42,6 +42,12 @@ pub fn load_history() -> Vec<Value> {
         .ok()
         .flatten()
         .and_then(|raw| serde_json::from_str::<Vec<Value>>(&raw).ok())
+        .map(|mut all| {
+            // the cap is enforced on the way in too: storage is editable, and a
+            // hand-stuffed ledger should not be able to make the card crawl
+            all.truncate(HISTORY_MAX);
+            all
+        })
         .unwrap_or_default()
 }
 
@@ -74,17 +80,34 @@ pub fn clear_history() {
 /// Debug builds only — `trunk serve` is debug, while every path that reaches a
 /// player (GitHub Pages, CI, the desktop bundle) builds `--release`, so the
 /// query string alone cannot hand anyone a solved grid.
+///
+/// The parameter must be exactly `dev`: a near miss like `?devgjljfda` is a
+/// stray URL, not a request for dev mode, and index.html turns it away.
 pub fn dev_mode(query: &str) -> bool {
-    cfg!(debug_assertions) && query.contains("dev")
+    cfg!(debug_assertions)
+        && query
+            .trim_start_matches('?')
+            .split('&')
+            .any(|kv| kv.split('=').next() == Some("dev"))
 }
 
 #[cfg(test)]
 mod tests {
+    use super::dev_mode;
+
     #[test]
     fn dev_mode_needs_both_the_query_and_a_debug_build() {
-        assert!(!super::dev_mode("")); // no query, never
-        assert!(!super::dev_mode("?lang=fr"));
+        assert!(!dev_mode("")); // no query, never
+        assert!(!dev_mode("?lang=fr"));
         // the whole point: in a release build the query is not enough
-        assert_eq!(super::dev_mode("?dev"), cfg!(debug_assertions));
+        assert_eq!(dev_mode("?dev"), cfg!(debug_assertions));
+        assert_eq!(dev_mode("?pack=souvenir&dev"), cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn only_the_exact_parameter_counts() {
+        for near_miss in ["?devgjljfda", "?xdev", "?undev=1", "?d=dev", "?pack=dev"] {
+            assert!(!dev_mode(near_miss), "{near_miss} must not enable dev mode");
+        }
     }
 }
