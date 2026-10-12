@@ -25,20 +25,37 @@
   </script>
   <style>
     :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a;
+            /* one palette, named by role: every piece of chrome is ink at low
+               strength, so the handwriting stays the darkest thing on the page */
+            --ink-soft: rgba(26, 26, 26, 0.74);
+            --line: rgba(26, 26, 26, 0.40);
+            --line-faint: rgba(26, 26, 26, 0.22);
+            --wash: rgba(26, 26, 26, 0.07);
+            --gold: rgba(190, 160, 70, 0.30);
+            --gold-faint: rgba(190, 160, 70, 0.16);
+            /* the phantom's colour: cold ink-blue against the warm paper */
+            --phantom: #26406b;
+            --good: #3c6b45;  /* the check's green, ink-toned for the paper */
             /* fit the board to whichever axis is tighter: the 9x9 plus its
                bars must never need scrolling, on a phone or a short window */
             --cell: min(3.2rem, (100vw - 1.6rem) / 9, (100vh - 15rem) / 9); }
-    body { background: var(--paper); color: var(--ink); font-family: Georgia, serif;
+    body { background: var(--paper); color: var(--ink);
+           font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+           line-height: 1.5; -webkit-font-smoothing: antialiased;
            display: flex; flex-direction: column; align-items: center; margin: 1.2rem; }
-    h1 { font-size: 1.1rem; font-weight: normal; letter-spacing: 0.12em; margin: 0 0 0.8rem; }
+    h1 { font-size: 1.05rem; font-weight: normal; letter-spacing: 0.17em;
+         color: var(--ink-soft); margin: 0 0 0.9rem; text-align: center; }
     /* phone fit: cells shrink with the viewport so the 9x9 always fits portrait */
     @media (max-width: 520px) {
       :root { --cell: min((100vw - 1.1rem) / 9, (100vh - 13rem) / 9); }
       body { margin: 0.5rem; }
       h1 { font-size: 0.9rem; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
     }
-    .grid { display: grid; grid-template-columns: repeat(9, var(--cell)); border: 2px solid var(--red); }
-    .cell { width: var(--cell); height: var(--cell); border: 1px solid var(--red);
+    .grid { display: grid; grid-template-columns: repeat(9, var(--cell));
+            border: 3px solid var(--red);
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 14px rgba(26, 26, 26, 0.10);
+            transition: border-color 0.5s ease, box-shadow 0.6s ease; }
+    .cell { width: var(--cell); height: var(--cell); border: 1.5px solid var(--red);
             display: flex; align-items: center; justify-content: center;
             position: relative; cursor: pointer; box-sizing: border-box; }
     /* touch hygiene: taps act immediately (no dbl-tap zoom), always hit the
@@ -79,19 +96,42 @@
                      letter-spacing: 0.12em; margin: 1rem 0 0.3rem; }
     .rules-card p { line-height: 1.55; margin: 0.2rem 0; }
     .rules-card button { margin-top: 1rem; }
+    /* the button glossary: the term in the game's own red, its sense beside it */
+    dl.controls { margin: 0.4rem 0 0; display: grid; grid-template-columns: auto 1fr;
+                  gap: 0.45rem 0.9rem; align-items: baseline; }
+    dl.controls dt { color: var(--red); white-space: nowrap; font-style: italic; }
+    dl.controls dd { margin: 0; line-height: 1.5; }
+    @media (max-width: 520px) {
+      dl.controls { grid-template-columns: 1fr; gap: 0.15rem; }
+      dl.controls dt { margin-top: 0.55rem; }
+    }
     /* the tic-tac-toe cross, black over the red minor lines — as in the originals */
-    .cross-r { border-right: 2px solid var(--ink); }
-    .cross-b { border-bottom: 2px solid var(--ink); }
+    .cross-r { border-right: 3px solid var(--ink); }
+    .cross-b { border-bottom: 3px solid var(--ink); }
     .glyph { background-repeat: no-repeat; }
     .cell div.value { width: 78%; height: 78%; }
     /* translucent, so a pack's paper background shows through the board */
-    .cell.selected { background: rgba(190, 160, 70, 0.30); }
-    .cell.same { background: rgba(190, 160, 70, 0.16); }
+    .cell.selected { background: var(--gold); }
+    .cell.same { background: var(--gold-faint); }
     .marks { position: absolute; inset: 2px; display: flex; flex-wrap: wrap;
              align-content: flex-start; gap: 1px; }
     .cell div.ghost { position: absolute; width: 78%; height: 78%; left: 11%; top: 11%;
                       transition: opacity 0.6s linear; pointer-events: none;
                       filter: blur(0.4px); }
+    /* phantom mode: his warm red leaves the room and a cold blue takes it —
+       the board, its rules and the clock all turn to the phantom's colour */
+    .app.phantom .grid { border-color: var(--phantom);
+                         box-shadow: 0 0 0 3px rgba(38, 64, 107, 0.10),
+                                     0 3px 34px rgba(38, 64, 107, 0.38); }
+    .app.phantom .cell { border-color: rgba(38, 64, 107, 0.42); }
+    .app.phantom .cross-r { border-right-color: var(--phantom); }
+    .app.phantom .cross-b { border-bottom-color: var(--phantom); }
+    .app.phantom h1 { color: var(--phantom); letter-spacing: 0.2em; }
+    .app.phantom .status { color: var(--phantom); letter-spacing: 0.05em; font-weight: bold; }
+    .app.phantom .msg { color: var(--phantom); }
+    .app.phantom button.digit { border-color: rgba(38, 64, 107, 0.45); }
+    .app.phantom .cell.selected { background: rgba(38, 64, 107, 0.16); }
+    .app.phantom .cell.same { background: rgba(38, 64, 107, 0.08); }
     .grid.flipping { animation: phantomflip 0.7s ease; }
     @keyframes phantomflip {
       0%   { opacity: 1; }
@@ -101,24 +141,102 @@
     .marks div.glyph { width: calc(var(--cell) * 0.27); height: calc(var(--cell) * 0.27); opacity: 0.75; }
     .bar { margin-top: 0.55rem; display: flex; gap: 0.45rem; flex-wrap: wrap;
            justify-content: center; align-items: center; max-width: calc(var(--cell) * 9 + 4px); }
-    .bar.palette { margin-top: 1rem; gap: 0.3rem; }
+    .bar.palette { margin-top: 0.9rem; gap: 0.32rem; }
+    .bar.setup { margin-top: 0.9rem; }
     /* digit buttons keep >=43px tap targets; on narrow screens they wrap 5+5
        rather than shrinking below a comfortable touch size */
-    button { font-family: inherit; background: none; border: 1px solid var(--ink);
-             padding: 0.25rem 0.7rem; cursor: pointer; }
-    button.on { background: var(--ink); color: var(--paper); }
+    button { font-family: inherit; font-size: 0.95rem; color: var(--ink);
+             background: none; border: 1px solid var(--line); border-radius: 2px;
+             padding: 0.28rem 0.75rem; cursor: pointer;
+             transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; }
+    button:hover:not(:disabled) { background: var(--wash); border-color: var(--ink-soft); }
+    button:active:not(:disabled) { transform: translateY(0.5px); }
+    button:disabled { opacity: 0.3; cursor: default; }
+    /* the game is fully playable from the keyboard — give that a visible ring */
+    button:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+    button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
     button.digit { width: 2.7rem; height: 2.7rem; padding: 0.2rem;
                    border: 1px solid var(--red); border-radius: 3px; }
     button.digit div.glyph { width: 100%; height: 100%; }
     button.digit.done { opacity: 0.25; }
-    button.digit.erase { color: var(--red); font-size: 1.1rem; }
+    /* labels for icon-only buttons: above the button, never under the hand.
+       A real element, not a ::after — predictable, and it works on touch too */
+    .tipped { position: relative; }
+    .tipped .tip {
+      position: absolute; bottom: calc(100% + 0.4rem); left: 50%;
+      transform: translateX(-50%) translateY(0.15rem);
+      background: var(--ink); color: var(--paper);
+      font-size: 0.72rem; letter-spacing: 0.05em; line-height: 1.5;
+      padding: 0.1rem 0.5rem; border-radius: 2px; white-space: nowrap;
+      opacity: 0; pointer-events: none; z-index: 20;
+      transition: opacity 0.14s ease, transform 0.14s ease;
+    }
+    .tipped:hover .tip, .tipped:focus-visible .tip, .tipped:active .tip {
+      opacity: 1; transform: translateX(-50%) translateY(0);
+    }
+    button.digit.erase { color: var(--red); display: flex; align-items: center;
+                         justify-content: center; }
+    button.digit.erase svg { width: 68%; height: 68%; }
     .seg { display: inline-flex; }
     .seg button { border-right-width: 0; }
     .seg button:last-child { border-right-width: 1px; }
-    .bar.setup button { font-size: 0.85rem; padding: 0.2rem 0.6rem; opacity: 0.85; }
-    .msg { margin-top: 0.7rem; min-height: 1.3rem; font-style: italic; }
-    .status { margin-top: 0.2rem; font-size: 0.85rem; opacity: 0.75; }
-    .solved { color: var(--red); font-weight: bold; }
+    .bar.setup button { font-size: 0.8rem; padding: 0.18rem 0.55rem;
+                        color: var(--ink-soft); border-color: var(--line-faint); }
+    .bar.setup button:hover:not(:disabled) { color: var(--ink); }
+    .bar.setup button.on { color: var(--paper); }
+    .msg { margin-top: 0.75rem; min-height: 1.3rem; font-style: italic;
+           color: var(--ink-soft); text-align: center; transition: color 0.4s ease; }
+    .status { margin-top: 0.25rem; font-size: 0.82rem; color: var(--ink-soft);
+              letter-spacing: 0.02em; }
+    /* the win: the board settles and blooms in his red, and the line rises
+       in under it — the one flourish the game allows itself */
+    .grid.won { border-color: var(--red);
+                box-shadow: 0 0 0 5px rgba(181, 39, 29, 0.10),
+                            0 4px 38px rgba(181, 39, 29, 0.30);
+                animation: settle 1.2s ease both; }
+    /* won inside the haunting: the bloom keeps the phantom's colour — you
+       beat it in its own room, so the room stays cold */
+    .app.phantom .grid.won { border-color: var(--phantom);
+                             box-shadow: 0 0 0 5px rgba(38, 64, 107, 0.12),
+                                         0 4px 38px rgba(38, 64, 107, 0.42); }
+    @keyframes settle {
+      0%   { transform: scale(1); }
+      30%  { transform: scale(1.014); }
+      100% { transform: scale(1); }
+    }
+    /* the loss: the board drains and recedes — the puzzle stops being yours.
+       The mirror of the win: one rises and blooms, the other dims and shrinks */
+    .grid.lost { border-color: rgba(38, 64, 107, 0.55);
+                 box-shadow: none;
+                 filter: grayscale(0.55) opacity(0.62);
+                 animation: recede 1.4s ease both; }
+    .app.phantom .grid.lost { border-color: rgba(38, 64, 107, 0.55); }
+    .grid.lost .cell.selected, .grid.lost .cell.same { background: none; }
+    @keyframes recede {
+      0%   { transform: scale(1); filter: grayscale(0) opacity(1); }
+      100% { transform: scale(0.975); filter: grayscale(0.55) opacity(0.62); }
+    }
+    /* the reading beat: quiet, then the verdict lands */
+    .verdict-reading { color: var(--ink-soft); font-style: italic; opacity: 0.85;
+                       animation: breathe 1.3s ease-in-out infinite; }
+    @keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+    /* check results read as a verdict: a mark, then the words */
+    .verdict-good { color: var(--good); font-style: normal; }
+    .verdict-bad { color: var(--red); font-style: normal; }
+    .lost-msg { color: var(--phantom); font-weight: bold; font-style: normal;
+                letter-spacing: 0.03em; animation: rise-in 1s ease both; }
+    @keyframes rise-in {
+      0%   { opacity: 0; transform: translateY(0.4rem); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .solved { color: var(--red); font-weight: bold; font-style: normal;
+              letter-spacing: 0.03em; font-size: 1.05rem;
+              animation: rise-in 0.8s ease both; }
+    /* some people get motion sick; no information lives in the game's motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important;
+                               transition-duration: 0.01ms !important; }
+    }
   </style>
 </head>
 <body>
