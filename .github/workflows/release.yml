@@ -102,6 +102,12 @@ jobs:
           case "${{ matrix.os }}" in
             macos-latest)
               app=$(ls -d "$B"/macos/*.app | head -1)
+              # the bundle otherwise carries only a linker-generated ad-hoc
+              # signature, which macOS reports as "damaged" on Apple Silicon.
+              # A proper ad-hoc signature (free, no Apple account) downgrades
+              # that to the ordinary unidentified-developer prompt.
+              codesign --force --deep --sign - "$app"
+              codesign -dv "$app" 2>&1 | grep -E "Signature|Identifier" || true
               ditto -c -k --keepParent "$app" "$out/a-souvenir-of-sudokus-MACOS.zip"
               # the updater consumes the .tar.gz the bundler signs
               cp "$B"/macos/*.app.tar.gz "$out/" 2>/dev/null || true
