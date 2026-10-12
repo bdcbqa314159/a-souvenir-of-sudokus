@@ -26,6 +26,8 @@ use session::{clear_session, load_session, save_session};
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if free
 const CHECKS: u32 = 3;
+/// gallows (4) + figure (6): he is drawn from nothing
+const STROKES: u32 = 10;
 const DIGIT_KEYS: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 #[derive(Clone, Default)]
@@ -63,6 +65,10 @@ fn App() -> impl IntoView {
     // autosave arms only after restore has had its chance (see Effect below)
     let session_ready = RwSignal::new(false);
     let show_rules = RwSignal::new(false);
+    // hangman mode: help is unlimited, but every answer draws one more stroke
+    // of him; the sixth finishes the drawing and the game
+    let strokes = RwSignal::new(0u32);
+    let hangman_over = move || strokes.get() >= STROKES;
     // composed reveal: a splash covers the page until the engine, the game,
     // the paper AND the sprite are all ready — then one fade shows the
     // finished board. Loading never performs its scatter in public.
@@ -283,6 +289,7 @@ fn App() -> impl IntoView {
             game.set(Some(rsp["game"].clone()));
             history.set(History::default());
             ph.reset();
+            strokes.set(0);
             hints_left.set(HINTS);
             checks_left.set(CHECKS);
             msg.set(Msg::NewGame(difficulty.clone()));
@@ -432,6 +439,21 @@ fn App() -> impl IntoView {
                 // progress = the engine ACCEPTED a NEW, correct placement.
                 // A rejected keystroke on a given, or retyping an already-correct
                 // digit, must never ward the phantom off.
+                // hangman mode interrogates every digit you place: right and
+                // he stays as he is, wrong and he draws one more stroke
+                if accepted && !mark && v != 0 && mode.get_untracked() == Mode::Hangman {
+                    if let Some(g) = game.get_untracked() {
+                        if board_of(&g, "solution")[i] != v {
+                            strokes.update(|s| *s += 1);
+                            let left = STROKES.saturating_sub(strokes.get_untracked());
+                            msg.set(if left == 0 {
+                                Msg::HangmanLost
+                            } else {
+                                Msg::HangmanDrew(left)
+                            });
+                        }
+                    }
+                }
                 if accepted && !mark && before != v {
                     if let Some(g) = game.get_untracked() {
                         if board_of(&g, "board")[i] == v && board_of(&g, "solution")[i] == v {
@@ -646,6 +668,21 @@ fn App() -> impl IntoView {
         ph.clear_haunt();
         ph.last_progress.set(js_sys::Date::now());
     };
+    let toggle_hangman = move |_: leptos::ev::MouseEvent| {
+        if mode.get_untracked() == Mode::Hangman {
+            mode.set(Mode::Classic);
+            msg.set(Msg::BackClassic);
+        } else {
+            if game.get_untracked().as_ref().is_some_and(solved_game) {
+                msg.set(Msg::Solved);
+                return;
+            }
+            mode.set(Mode::Hangman);
+            msg.set(Msg::HangmanOn);
+        }
+        ph.clear_haunt();
+    };
+
     let current_diff = move || {
         game.get()
             .and_then(|g| g["difficulty"].as_str().map(String::from))
@@ -671,10 +708,33 @@ fn App() -> impl IntoView {
             }
         }}
         // the page itself carries the mode: phantom cools the room
-        <div class="app" class:ready=ready class:phantom=move || mode.get() == Mode::Phantom>
+        <div class="app" class:ready=ready class:phantom=move || mode.get() == Mode::Phantom
+             class:hangman-mode=move || mode.get() == Mode::Hangman>
         <h1>"a-souvenir-of-sudokus"</h1>
+        <div class="board-row">
         <div class="grid" class:flipping=move || flip_anim.get() class:won=solved
-             class:lost=move || ph.over.get()>{cells}</div>
+             class:lost=move || ph.over.get() || hangman_over()>{cells}</div>
+        {move || (mode.get() == Mode::Hangman).then(|| view! {
+            // he draws himself as he answers: gallows first, then head, body,
+            // arms, legs — the sixth stroke finishes him and the grid
+            <svg class="hangman" viewBox="0 0 96 124" fill="none" stroke-linecap="round">
+                <g class="gallows">
+                    {move || (strokes.get() >= 1).then(|| view! { <path d="M8 117 H58"/> })}
+                    {move || (strokes.get() >= 2).then(|| view! { <path d="M20 117 V9"/> })}
+                    {move || (strokes.get() >= 3).then(|| view! { <path d="M20 9 H64"/> })}
+                    {move || (strokes.get() >= 4).then(|| view! { <path d="M64 9 V21"/> })}
+                </g>
+                <g class="figure">
+                    {move || (strokes.get() >= 5).then(|| view! { <circle cx="64" cy="29" r="8"/> })}
+                    {move || (strokes.get() >= 6).then(|| view! { <path d="M64 37 V71"/> })}
+                    {move || (strokes.get() >= 7).then(|| view! { <path d="M64 46 L51 59"/> })}
+                    {move || (strokes.get() >= 8).then(|| view! { <path d="M64 46 L77 59"/> })}
+                    {move || (strokes.get() >= 9).then(|| view! { <path d="M64 71 L53 94"/> })}
+                    {move || (strokes.get() >= 10).then(|| view! { <path d="M64 71 L75 94"/> })}
+                </g>
+            </svg>
+        })}
+        </div>
         <div class="bar palette">
             {palette}
             // a drawn eraser, not a backspace arrow: this rubs the cell out,
@@ -695,6 +755,7 @@ fn App() -> impl IntoView {
                 {move || t(lang.get()).pencil}
             </button>
             <button
+                class:hidden=move || mode.get() == Mode::Hangman
                 disabled=move || !dev && (mode.get() == Mode::Phantom || hints_left.get() == 0)
                 on:click=move |_| key_action("H")
             >
@@ -704,6 +765,7 @@ fn App() -> impl IntoView {
                 }}
             </button>
             <button
+                class:hidden=move || mode.get() == Mode::Hangman
                 disabled=move || !dev && (mode.get() == Mode::Phantom || checks_left.get() == 0)
                 on:click=move |_| key_action("c")
             >
@@ -746,6 +808,9 @@ fn App() -> impl IntoView {
             </span>
             <button class:on=move || mode.get() == Mode::Phantom on:click=toggle_phantom>
                 {move || t(lang.get()).phantom}
+            </button>
+            <button class:on=move || mode.get() == Mode::Hangman on:click=toggle_hangman>
+                {move || t(lang.get()).hangman}
             </button>
             {move || has_souvenir.get().then(|| {
                 let on_souvenir = move || pack() != "assets/placeholder";
@@ -806,6 +871,8 @@ fn App() -> impl IntoView {
                     <p>{move || t(lang.get()).rules_classic}</p>
                     <h2>{move || t(lang.get()).phantom}</h2>
                     <p>{move || t(lang.get()).rules_phantom}</p>
+                    <h2>{move || t(lang.get()).hangman}</h2>
+                    <p>{move || t(lang.get()).rules_hangman}</p>
                     // the buttons, named with the very words printed on them
                     <h2>{move || t(lang.get()).rules_controls}</h2>
                     <dl class="controls">
@@ -818,6 +885,7 @@ fn App() -> impl IntoView {
                         <dd>{move || t(lang.get()).ctl_undo}</dd>
                         <dt>{move || t(lang.get()).new_game}</dt><dd>{move || t(lang.get()).ctl_new}</dd>
                         <dt>{move || t(lang.get()).phantom}</dt><dd>{move || t(lang.get()).ctl_phantom}</dd>
+                        <dt>{move || t(lang.get()).hangman_ask}</dt><dd>{move || t(lang.get()).ctl_hangman}</dd>
                         <dt>{move || format!("souvenir · {}", t(lang.get()).classic)}</dt>
                         <dd>{move || t(lang.get()).ctl_pack}</dd>
                     </dl>
