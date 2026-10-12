@@ -36,6 +36,7 @@
             /* the phantom's colour: cold ink-blue against the warm paper */
             --phantom: #26406b;
             --good: #3c6b45;  /* the check's green, ink-toned for the paper */
+            --hangman: #35603f;  /* the hangman's green: the room he judges in */
             /* fit the board to whichever axis is tighter: the 9x9 plus its
                bars must never need scrolling, on a phone or a short window */
             --cell: min(3.2rem, (100vw - 1.6rem) / 9, (100vh - 15rem) / 9); }
@@ -215,6 +216,40 @@
     @keyframes recede {
       0%   { transform: scale(1); filter: grayscale(0) opacity(1); }
       100% { transform: scale(0.975); filter: grayscale(0.55) opacity(0.62); }
+    }
+    /* hangman mode has its own room, as phantom does: a sober green takes
+       his red, and the gallows stays in the same grey the chrome uses */
+    .app.hangman-mode .grid { border-color: var(--hangman);
+                              box-shadow: 0 0 0 3px rgba(53, 96, 63, 0.10),
+                                          0 3px 30px rgba(53, 96, 63, 0.30); }
+    .app.hangman-mode .cell { border-color: rgba(53, 96, 63, 0.42); }
+    .app.hangman-mode .cross-r { border-right-color: var(--hangman); }
+    .app.hangman-mode .cross-b { border-bottom-color: var(--hangman); }
+    .app.hangman-mode h1 { color: var(--hangman); letter-spacing: 0.2em; }
+    .app.hangman-mode .status { color: var(--hangman); letter-spacing: 0.05em; font-weight: bold; }
+    .app.hangman-mode .msg { color: var(--hangman); }
+    .app.hangman-mode button.digit { border-color: rgba(53, 96, 63, 0.45); }
+    .app.hangman-mode .cell.selected { background: rgba(53, 96, 63, 0.16); }
+    .app.hangman-mode .cell.same { background: rgba(53, 96, 63, 0.08); }
+    .app.hangman-mode .grid.won { border-color: var(--hangman);
+                                  box-shadow: 0 0 0 5px rgba(53, 96, 63, 0.12),
+                                              0 4px 38px rgba(53, 96, 63, 0.40); }
+    /* hangman mode: he is drawn beside the board, in the same pen */
+    .board-row { display: flex; align-items: flex-start; justify-content: center;
+                 gap: 1rem; }
+    svg.hangman { width: calc(var(--cell) * 2.6); flex: none; margin-top: 0.2rem; }
+    svg.hangman .gallows { stroke: var(--ink-soft); stroke-width: 2.5; }
+    /* the room judges in green, but the man is drawn in his red — the
+       threat keeps the pen */
+    svg.hangman .figure { stroke: var(--red); stroke-width: 3; }
+    svg.hangman .figure > * { animation: ink-in 0.45s ease both; }
+    @keyframes ink-in { 0% { opacity: 0; transform: translateY(-2px); }
+                        100% { opacity: 1; transform: translateY(0); } }
+    button.ask-hangman { border-color: var(--red); color: var(--red); }
+    button.hidden { display: none; }
+    @media (max-width: 520px) {
+      .board-row { gap: 0.4rem; }
+      svg.hangman { width: calc(var(--cell) * 2); }
     }
     /* the reading beat: quiet, then the verdict lands */
     .verdict-reading { color: var(--ink-soft); font-style: italic; opacity: 0.85;
