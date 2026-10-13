@@ -11,6 +11,47 @@ wasm (pinned emsdk 3.1.64, cloned on first run), then `cargo tauri build`
 (which runs trunk itself). Bundles land under
 `web/src-tauri/target/release/bundle/`.
 
+## Android (APK)
+
+The engine needs no NDK work: it stays wasm, loaded by Android's WebView the
+same way the browser loads it. The NDK is for the Rust shell.
+
+What the machine needs:
+
+- **Android Studio** — its SDK Manager installs the NDK (Settings → Languages
+  & Frameworks → Android SDK → SDK Tools → NDK (Side by side), ~2GB).
+- **A JDK 21** — and this one bites: Studio's bundled JDK is 25, which Gradle
+  8.14 (pinned by the generated project, as AGP requires) refuses with
+  `Unsupported class file major version 69`. Install it beside, no sudo:
+  ```
+  mkdir -p ~/.jdks && cd ~/.jdks
+  curl -sL -o t.tar.gz "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jdk/hotspot/normal/eclipse"
+  tar xzf t.tar.gz && rm t.tar.gz
+  ```
+- **The Rust targets**: `rustup target add aarch64-linux-android
+  armv7-linux-androideabi i686-linux-android x86_64-linux-android`
+
+Then, from `web/`, with the three variables set:
+
+```
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export NDK_HOME="$ANDROID_HOME/ndk/<version>"
+export JAVA_HOME="$HOME/.jdks/jdk-21.<version>/Contents/Home"
+cargo tauri android init          # generates src-tauri/gen/android (gitignored)
+cargo tauri android build --apk --debug
+```
+
+On an emulator (`~/Library/Android/sdk/emulator/emulator -avd <name>`), install
+with `adb install -r` and launch
+`com.delapatada.souvenirsudokus.debug/com.delapatada.souvenirsudokus.MainActivity`.
+The page loads from `http://tauri.localhost/`, which is why `web/index.html`'s
+stray-URL gate exempts that host — without it the app bounces itself to the
+valvula page on launch.
+
+A release APK/AAB needs a **keystore**, which is a third key to back up
+alongside the updater key and `wm.key`. Create it in Studio (Build → Generate
+Signed Bundle / APK); once the app is on Play it can never be replaced.
+
 ## Before the first build on a new machine
 
 1. Install the per-OS prerequisites below. The public pack (generated
