@@ -321,7 +321,27 @@
     /* the reading beat: quiet, then the verdict lands */
     .verdict-reading { color: var(--ink-soft); font-style: italic; opacity: 0.85;
                        animation: breathe 1.3s ease-in-out infinite; }
-    @keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+    /* shallower than it was: the inspection below has to stay legible through it */
+    @keyframes breathe { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
+    /* the same inspection as the valvula page, at the pace of one check (1.3s):
+       he looks it over, taps it, and the gear turns while the gauge reads.
+       No shrug here — the verdict replaces the whole line. */
+    .inspect { display: inline-flex; gap: 0.18em; margin-right: 0.4em;
+               vertical-align: -0.06em; font-style: normal; }
+    .inspect span { display: inline-block; animation: 1.3s ease-in-out infinite; }
+    .inspect .glass  { animation-name: sweep; }
+    .inspect .wrench { animation-name: tap; animation-delay: 0.15s; }
+    .inspect .gear   { animation-name: turn; animation-duration: 1.95s;
+                       animation-timing-function: linear; }
+    @keyframes sweep { 0%, 100% { transform: translateX(-0.12em) rotate(-10deg); }
+                       50%      { transform: translateX(0.12em) rotate(10deg); } }
+    @keyframes tap   { 0%, 100% { transform: rotate(-14deg); }
+                       50%      { transform: rotate(12deg) translateY(0.05em); } }
+    @keyframes turn  { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .inspect span { animation: none; }
+      .verdict-reading { animation: none; }
+    }
     /* check results read as a verdict: a mark, then the words */
     .verdict-good { color: var(--good); font-style: normal; }
     .verdict-bad { color: var(--red); font-style: normal; }

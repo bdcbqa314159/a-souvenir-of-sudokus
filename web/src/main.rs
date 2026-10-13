@@ -1042,7 +1042,25 @@ fn App() -> impl IntoView {
         <div class="msg" class:solved=solved class:lost-msg=move || ph.over.get()
              class:verdict-reading=move || msg.get() == Msg::Checking
              class:verdict-good=move || msg.get() == Msg::AllGood
-             class:verdict-bad=move || matches!(msg.get(), Msg::WrongCells(_))>{move || msg.get().text(lang.get())}</div>
+             class:verdict-bad=move || matches!(msg.get(), Msg::WrongCells(_))>
+            {move || {
+                let m = msg.get();
+                let words = m.text(lang.get());
+                if m == Msg::Checking {
+                    // the valvula page's inspection, in the status line
+                    view! {
+                        <span class="inspect" attr:aria-hidden="true">
+                            <span class="glass">"\u{1F50D}"</span>
+                            <span class="wrench">"\u{1F527}"</span>
+                            <span class="gear">"\u{2699}\u{FE0F}"</span>
+                        </span>
+                        {words}
+                    }.into_any()
+                } else {
+                    words.into_any()
+                }
+            }}
+        </div>
         <div class="status">{status}</div>
         </div>
         {move || show_history.get().then(|| view! {
