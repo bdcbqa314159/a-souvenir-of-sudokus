@@ -153,6 +153,10 @@ pub struct T {
     pub erase: &'static str,
     pub diff_hint: &'static str,
     pub classic: &'static str,
+    /// the pack toggle's other side: ordinary type, as against his hand. It
+    /// used to borrow `classic`, which now names a mode — a button and a mode
+    /// sharing a word was one word doing two jobs.
+    pub regular: &'static str,
     pub rules_btn: &'static str,
     pub rules_classic: &'static str,
     pub rules_phantom: &'static str,
@@ -182,7 +186,8 @@ pub struct T {
     pub ctl_check: &'static str,
     pub ctl_undo: &'static str,
     pub ctl_new: &'static str,
-    pub ctl_phantom: &'static str,
+    /// the three-way mode picker in the setup bar
+    pub ctl_modes: &'static str,
     pub ctl_pack: &'static str,
 }
 
@@ -226,6 +231,7 @@ pub const EN: T = T {
     erase: "erase",
     diff_hint: "leave phantom mode to change difficulty",
     classic: "classic",
+    regular: "regular",
     rules_btn: "rules",
     rules_classic: "Fill the grid so that every row, every column and every 3\u{d7}3 box holds the digits 1 to 9, each exactly once. The black digits are given \u{2014} they were always there. Tap a cell, then a digit from the palette, to write in red; the pencil leaves small marks while you think. You have 3 hints and 3 checks per game \u{2014} spend them wisely.",
     rules_phantom: "Phantom mode is a pact with the clock: keep placing correct digits, and the page stays yours. Stall too long and the haunting begins \u{2014} another grid fades in over the board. Place a correct digit before it settles to ward it off; fail, and the sudoku flips into its phantom: your correct work survives, but the puzzle reshapes around it. Three lives per game, no hints, no checks \u{2014} trust your hand.",
@@ -253,7 +259,7 @@ pub const EN: T = T {
     ctl_check: "tells you how many of your digits are wrong \u{2014} not which ones. Three per game, none in phantom mode.",
     ctl_undo: "step back and forward through your own moves.",
     ctl_new: "deals a fresh grid \u{2014} easy, medium or hard, graded by the techniques it needs.",
-    ctl_phantom: "enters (or leaves) the pact with the clock described above.",
+    ctl_modes: "picks how you play: classic, the pact with the clock, or the hangman. Leaving the phantom\u{2019}s room asks twice \u{2014} the first press is the question.",
     ctl_pack: "switches between his handwriting and plain printed digits.",
 };
 
@@ -297,6 +303,7 @@ pub const FR: T = T {
     erase: "effacer",
     diff_hint: "quitte le mode fantôme pour changer de difficulté",
     classic: "classique",
+    regular: "r\u{e9}gulier",
     rules_btn: "r\u{e8}gles",
     rules_classic: "Remplis la grille pour que chaque ligne, chaque colonne et chaque carr\u{e9} 3\u{d7}3 contiennent les chiffres de 1 \u{e0} 9, une seule fois chacun. Les chiffres noirs sont donn\u{e9}s \u{2014} ils ont toujours \u{e9}t\u{e9} l\u{e0}. Touche une case puis un chiffre de la palette pour \u{e9}crire en rouge ; le crayon pose de petites notes pendant que tu r\u{e9}fl\u{e9}chis. Tu as 3 indices et 3 v\u{e9}rifications par partie \u{2014} d\u{e9}pense-les avec sagesse.",
     rules_phantom: "Le mode fant\u{f4}me est un pacte avec l'horloge : continue \u{e0} placer des chiffres justes, et la page reste \u{e0} toi. Tarde trop et la hantise commence \u{2014} une autre grille appara\u{ee}t en transparence sur la tienne. Place un chiffre juste avant qu'elle ne s'installe pour la repousser ; sinon, le sudoku bascule en son fant\u{f4}me : ton travail juste survit, mais l'\u{e9}nigme se recompose autour. Trois vies par partie, sans indices ni v\u{e9}rifications \u{2014} fie-toi \u{e0} ta main.",
@@ -324,7 +331,7 @@ pub const FR: T = T {
     ctl_check: "te dit combien de tes chiffres sont faux \u{2014} pas lesquels. Trois par partie, aucune en mode fant\u{f4}me.",
     ctl_undo: "reviens en arri\u{e8}re et en avant dans tes propres coups.",
     ctl_new: "distribue une nouvelle grille \u{2014} facile, moyen ou difficile, selon les techniques qu'elle exige.",
-    ctl_phantom: "entre (ou sort) du pacte avec l'horloge d\u{e9}crit plus haut.",
+    ctl_modes: "choisit comment tu joues : classique, le pacte avec l\u{2019}horloge, ou le pendu. Quitter la chambre du fant\u{f4}me demande deux fois \u{2014} la premi\u{e8}re pression est la question.",
     ctl_pack: "bascule entre son \u{e9}criture et des chiffres imprim\u{e9}s.",
 };
 
@@ -368,6 +375,7 @@ pub const ES: T = T {
     erase: "borrar",
     diff_hint: "sal del modo fantasma para cambiar la dificultad",
     classic: "clásico",
+    regular: "regular",
     rules_btn: "reglas",
     rules_classic: "Rellena la cuadr\u{ed}cula para que cada fila, cada columna y cada caja de 3\u{d7}3 contengan los d\u{ed}gitos del 1 al 9, una sola vez cada uno. Los d\u{ed}gitos negros vienen dados \u{2014} siempre estuvieron ah\u{ed}. Toca una celda y luego un d\u{ed}gito de la paleta para escribir en rojo; el l\u{e1}piz deja peque\u{f1}as notas mientras piensas. Tienes 3 pistas y 3 comprobaciones por partida \u{2014} g\u{e1}stalas con cabeza.",
     rules_phantom: "El modo fantasma es un pacto con el reloj: sigue colocando d\u{ed}gitos correctos y la p\u{e1}gina seguir\u{e1} siendo tuya. Si tardas demasiado, empieza el embrujo \u{2014} otra cuadr\u{ed}cula se trasluce sobre la tuya. Coloca un d\u{ed}gito correcto antes de que se asiente para ahuyentarla; si no, el sudoku se convierte en su fantasma: tu trabajo correcto sobrevive, pero el enigma se recompone a su alrededor. Tres vidas por partida, sin pistas ni comprobaciones \u{2014} conf\u{ed}a en tu mano.",
@@ -395,7 +403,7 @@ pub const ES: T = T {
     ctl_check: "te dice cu\u{e1}ntos de tus d\u{ed}gitos est\u{e1}n mal \u{2014} no cu\u{e1}les. Tres por partida, ninguna en modo fantasma.",
     ctl_undo: "retrocede y avanza por tus propias jugadas.",
     ctl_new: "reparte una cuadr\u{ed}cula nueva \u{2014} f\u{e1}cil, medio o dif\u{ed}cil, seg\u{fa}n las t\u{e9}cnicas que exige.",
-    ctl_phantom: "entra (o sale) del pacto con el reloj descrito arriba.",
+    ctl_modes: "elige c\u{f3}mo juegas: cl\u{e1}sico, el pacto con el reloj, o el ahorcado. Salir del cuarto del fantasma pregunta dos veces \u{2014} la primera pulsaci\u{f3}n es la pregunta.",
     ctl_pack: "alterna entre su escritura y d\u{ed}gitos impresos.",
 };
 

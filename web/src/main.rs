@@ -92,7 +92,7 @@ fn App() -> impl IntoView {
         let _ = loc.replace(&format!("{root}404.html?tried={path}%3Fdev"));
     }
     let flip_anim = RwSignal::new(false);
-    // classic/souvenir toggle: shown only when a souvenir pack exists;
+    // regular/souvenir toggle: shown only when a souvenir pack exists;
     // remembers WHICH one loaded (abuelo or souvenir) as the toggle target
     let has_souvenir = RwSignal::new(false);
     let souvenir_pack: RwSignal<String> = RwSignal::new("assets/souvenir".into());
@@ -925,11 +925,25 @@ fn App() -> impl IntoView {
     // entering phantom is one click; leaving is deliberate — click twice within 3s.
     // Lives and game-over persist for the whole game: toggling modes must never
     // resurrect a lost run (only `n` does).
-    let toggle_phantom = move |_| {
-        if ph.over.get_untracked() {
-            msg.set(Msg::Won);
+    // One way in and out of each mode. It used to be two toggles, which meant
+    // the way back to classic was pressing the mode you were already in —
+    // easy to describe, annoying to live with.
+    let set_mode = move |target: Mode| {
+        if mode.get_untracked() == target {
             return;
         }
+        if ph.over.get_untracked() {
+            msg.set(Msg::Won); // the phantoms already took this grid
+            return;
+        }
+        // hangman interrogates digits as they land, and a finished grid has
+        // none left to land
+        if target == Mode::Hangman && game.get_untracked().as_ref().is_some_and(solved_game) {
+            msg.set(Msg::Solved(mistakes.get_untracked()));
+            return;
+        }
+        // leaving the phantom's room stays a decision rather than a mis-click:
+        // the first press asks, a second within three seconds goes
         if mode.get_untracked() == Mode::Phantom {
             let armed_recently = leave_arm
                 .get_untracked()
@@ -939,33 +953,16 @@ fn App() -> impl IntoView {
                 msg.set(Msg::LeaveConfirm);
                 return;
             }
-            mode.set(Mode::Classic);
-            msg.set(Msg::BackClassic);
-        } else {
-            mode.set(Mode::Phantom);
-            msg.set(Msg::PhantomOn);
         }
         leave_arm.set(None);
+        mode.set(target);
+        msg.set(match target {
+            Mode::Phantom => Msg::PhantomOn,
+            Mode::Hangman => Msg::HangmanOn,
+            Mode::Classic => Msg::BackClassic,
+        });
         ph.clear_haunt();
         ph.last_progress.set(js_sys::Date::now());
-    };
-    let toggle_hangman = move |_: leptos::ev::MouseEvent| {
-        if ph.over.get_untracked() {
-            msg.set(Msg::Won); // the phantoms already took this grid
-            return;
-        }
-        if mode.get_untracked() == Mode::Hangman {
-            mode.set(Mode::Classic);
-            msg.set(Msg::BackClassic);
-        } else {
-            if game.get_untracked().as_ref().is_some_and(solved_game) {
-                msg.set(Msg::Solved(mistakes.get_untracked()));
-                return;
-            }
-            mode.set(Mode::Hangman);
-            msg.set(Msg::HangmanOn);
-        }
-        ph.clear_haunt();
     };
 
     let current_diff = move || {
@@ -1097,12 +1094,20 @@ fn App() -> impl IntoView {
                     })
                     .collect::<Vec<_>>()}
             </span>
-            <button class:on=move || mode.get() == Mode::Phantom on:click=toggle_phantom>
-                {move || t(lang.get()).phantom}
-            </button>
-            <button class:on=move || mode.get() == Mode::Hangman on:click=toggle_hangman>
-                {move || t(lang.get()).hangman}
-            </button>
+            <span class="seg modes">
+                <button class:on=move || mode.get() == Mode::Classic
+                        on:click=move |_| set_mode(Mode::Classic)>
+                    {move || t(lang.get()).classic}
+                </button>
+                <button class:on=move || mode.get() == Mode::Phantom
+                        on:click=move |_| set_mode(Mode::Phantom)>
+                    {move || t(lang.get()).phantom}
+                </button>
+                <button class:on=move || mode.get() == Mode::Hangman
+                        on:click=move |_| set_mode(Mode::Hangman)>
+                    {move || t(lang.get()).hangman}
+                </button>
+            </span>
             {move || has_souvenir.get().then(|| {
                 let on_souvenir = move || pack() != "assets/placeholder";
                 view! {
@@ -1126,7 +1131,7 @@ fn App() -> impl IntoView {
                         {move || {
                             // read manifest so the label re-renders on switch
                             manifest.track();
-                            if on_souvenir() { t(lang.get()).classic.to_string() } else { "souvenir".to_string() }
+                            if on_souvenir() { t(lang.get()).regular.to_string() } else { "souvenir".to_string() }
                         }}
                     </button>
                 }
@@ -1309,10 +1314,14 @@ fn App() -> impl IntoView {
                         <dt>{move || format!("{} · {}", t(lang.get()).undo, t(lang.get()).redo)}</dt>
                         <dd>{move || t(lang.get()).ctl_undo}</dd>
                         <dt>{move || t(lang.get()).new_game}</dt><dd>{move || t(lang.get()).ctl_new}</dd>
-                        <dt>{move || t(lang.get()).phantom}</dt><dd>{move || t(lang.get()).ctl_phantom}</dd>
+                        <dt>{move || {
+                            let tr = t(lang.get());
+                            format!("{} \u{00b7} {} \u{00b7} {}", tr.classic, tr.phantom, tr.hangman)
+                        }}</dt>
+                        <dd>{move || t(lang.get()).ctl_modes}</dd>
                         <dt>{move || t(lang.get()).history}</dt><dd>{move || t(lang.get()).ctl_history}</dd>
                         <dt>{move || t(lang.get()).hangman_ask}</dt><dd>{move || t(lang.get()).ctl_hangman}</dd>
-                        <dt>{move || format!("souvenir · {}", t(lang.get()).classic)}</dt>
+                        <dt>{move || format!("souvenir · {}", t(lang.get()).regular)}</dt>
                         <dd>{move || t(lang.get()).ctl_pack}</dd>
                     </dl>
                     <button on:click=move |_| show_rules.set(false)>{move || t(lang.get()).close}</button>
