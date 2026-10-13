@@ -62,6 +62,8 @@ fn App() -> impl IntoView {
     // oracle: place 1..9 in one square, watch the number, and the grid gives
     // itself away one cell at a time.
     let mistakes = RwSignal::new(0u32);
+    // the square a hint just filled, so the eye can find it
+    let landed: RwSignal<Option<usize>> = RwSignal::new(None);
     // dev mode (?dev in the URL): assists uncapped and a solve button. Only in
     // debug builds — `trunk serve` is debug, every shipped path (pages, CI,
     // tauri) is --release, so no player can hand themselves a solved grid.
@@ -450,6 +452,7 @@ fn App() -> impl IntoView {
     // which keeps the old promise that a hint is charged only once it happened.
     let fire_hint = move |target: Option<usize>| {
         aiming.set(None);
+        let before = game.get_untracked().map(|g| board_of(&g, "board"));
         let mut req = json!({"cmd": "hint"});
         if let Some(i) = target {
             req["i"] = json!(i);
@@ -457,6 +460,22 @@ fn App() -> impl IntoView {
         }
         if play(req) && !dev {
             hints_left.update(|h| *h -= 1);
+        }
+        // which square changed is how the board knows where to point. The
+        // engine's reply carries the index, but play() answers whether a
+        // command worked, not where it worked — and a diff cannot disagree
+        // with what is actually on the board.
+        let after = game.get_untracked().map(|g| board_of(&g, "board"));
+        if let (Some(before), Some(after)) = (before, after) {
+            if let Some(i) = (0..81).find(|&i| before[i] != after[i]) {
+                landed.set(Some(i));
+                spawn_local(async move {
+                    gloo_timers::future::TimeoutFuture::new(1400).await;
+                    if landed.get_untracked() == Some(i) {
+                        landed.set(None); // the mark fades, the digit stays
+                    }
+                });
+            }
         }
     };
 
@@ -746,6 +765,7 @@ fn App() -> impl IntoView {
                     (board_of(&inc, "puzzle"), 0.08 + 0.45 * progress)
                 });
         let aim = aiming.get().is_some();
+        let just_landed = landed.get();
         (0..81usize)
             .map(|i| {
                 let v = board[i];
@@ -760,6 +780,9 @@ fn App() -> impl IntoView {
                 // while a hint is being aimed the highlight steps back, so the
                 // board suggests nothing about where it should go, and blank
                 // squares advertise themselves instead
+                if just_landed == Some(i) {
+                    class.push_str(" landed");
+                }
                 if aim {
                     if v == 0 {
                         class.push_str(" aimable");
@@ -773,6 +796,10 @@ fn App() -> impl IntoView {
                     .then(|| digit_style(&man, role, v, i))
                     .flatten()
                     .map(|style| view! { <div class="value glyph" style=style></div> });
+                // pencil marks sit where the digit they stand for sits: 1 at the
+                // top left, 9 at the bottom right. A wrapped row of them had to
+                // be read; placed, they can be glanced at.
+                let mark_at = |d: i64| ((d - 1) / 3 + 1, (d - 1) % 3 + 1);
                 let ghost_img = ghost.as_ref().and_then(|(inc_puzzle, opacity)| {
                     let gv = inc_puzzle[i];
                     (gv != 0)
@@ -786,8 +813,12 @@ fn App() -> impl IntoView {
                     .then(|| {
                         marks[i]
                             .iter()
-                            .filter_map(|d| digit_style(&man, "user", *d, i))
-                            .map(|style| view! { <div class="glyph" style=style></div> })
+                            .filter_map(|d| digit_style(&man, "user", *d, i).map(|s| (*d, s)))
+                            .map(|(d, style)| {
+                                let (row, col) = mark_at(d);
+                                let style = format!("{style};grid-row:{row};grid-column:{col}");
+                                view! { <div class="glyph" style=style></div> }
+                            })
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
