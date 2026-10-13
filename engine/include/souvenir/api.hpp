@@ -11,7 +11,7 @@
 //   mark        game, i, v                  -> game (toggle pencil mark)
 //   clear_marks game, i                     -> game
 //   hint        game, seed?                 -> game, index (null when solved)
-//   check       game                        -> game, wrong: [indices]
+//   check       game                        -> game, wrong: how many are wrong
 //   candidates  game                        -> game, candidates: 81 digit lists
 //   phantom     game, seed?                 -> game (see phantom_of)
 //   grade       puzzle: [81 ints]           -> difficulty (no game/solved fields)

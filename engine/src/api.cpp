@@ -108,7 +108,13 @@ std::string apply_command(const std::string &request) {
     }
     if (cmd == "check") {
       Game g = game_of(req);
-      return respond(g, {{"wrong", g.wrong_cells()}}).dump();
+      // How many, not which. The positions turned one check into a map of the
+      // grid: fill every empty cell with the same digit, check, and the cells
+      // NOT named are exactly the cells holding that digit. A count answers
+      // the player's real question ("am I still on track?") and answers that
+      // one instead. wrong_cells() stays on the C++ Game for callers that are
+      // not a player — this is the wire, where the player is.
+      return respond(g, {{"wrong", static_cast<int>(g.wrong_cells().size())}}).dump();
     }
     if (cmd == "candidates") {
       Game g = game_of(req);
