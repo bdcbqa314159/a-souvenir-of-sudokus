@@ -21,7 +21,7 @@ use engine::{board_of, cmd, solved_game, Manifest};
 use i18n::{detect_lang, diff_label, fill, save_lang, t, Lang, Mode, Msg};
 use pack::{digit_style, load_pack, pack, paper_store, sprite_url, url_pack};
 use phantom::{stall_ms, window_ms, Phantom, LIVES};
-use session::{clear_session, dev_mode, load_session, save_session};
+use session::{clear_session, dev_mode, dev_mode_exists, load_session, save_session};
 
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if free
@@ -57,10 +57,38 @@ fn App() -> impl IntoView {
     let leave_arm: RwSignal<Option<f64>> = RwSignal::new(None); // phantom exit confirm
                                                                 // a hint is aimed before it lands: Some(deadline) while the player chooses
     let aiming: RwSignal<Option<f64>> = RwSignal::new(None);
+    // wrong digits placed this grid. Counted as they happen, told only when
+    // the grid is finished — a tally that ticks while you play would be an
+    // oracle: place 1..9 in one square, watch the number, and the grid gives
+    // itself away one cell at a time.
+    let mistakes = RwSignal::new(0u32);
     // dev mode (?dev in the URL): assists uncapped and a solve button. Only in
     // debug builds — `trunk serve` is debug, every shipped path (pages, CI,
     // tauri) is --release, so no player can hand themselves a solved grid.
-    let dev = dev_mode(&window().location().search().unwrap_or_default());
+    let search = window().location().search().unwrap_or_default();
+    let dev = dev_mode(&search);
+    // and in a build without a dev mode, `?dev` is not a knob that does
+    // nothing — it is a stray parameter, and gets the same dead end as any
+    // other. index.html lets it through because only this side knows whether
+    // the wasm it loaded was built with a dev mode in it.
+    if !dev_mode_exists()
+        && search
+            .trim_start_matches('?')
+            .split('&')
+            .any(|kv| kv == "dev")
+    {
+        let loc = window().location();
+        let path = loc.pathname().unwrap_or_default();
+        let root = match loc.hostname() {
+            Ok(h) if h.ends_with("github.io") => path
+                .split('/')
+                .nth(1)
+                .filter(|s| !s.is_empty())
+                .map_or_else(|| "/".to_string(), |seg| format!("/{seg}/")),
+            _ => "/".to_string(),
+        };
+        let _ = loc.replace(&format!("{root}404.html?tried={path}%3Fdev"));
+    }
     let flip_anim = RwSignal::new(false);
     // classic/souvenir toggle: shown only when a souvenir pack exists;
     // remembers WHICH one loaded (abuelo or souvenir) as the toggle target
@@ -193,6 +221,9 @@ fn App() -> impl IntoView {
                 // or one refresh forgives every mistake
                 strokes.set(s["strokes"].as_u64().unwrap_or(0).min(STROKES as u64) as u32);
             }
+            // like the drawing, the tally survives a reload — otherwise one
+            // refresh buys a clean record
+            mistakes.set(s["mistakes"].as_u64().unwrap_or(0).min(u32::MAX as u64) as u32);
             if s["mode"] == "phantom" {
                 mode.set(Mode::Phantom);
                 // re-anchor the stall clock: the pact resumes from NOW, a
@@ -245,6 +276,7 @@ fn App() -> impl IntoView {
             "over": ph.over.get(),
             "hints": hints_left.get(),
             "checks": checks_left.get(),
+            "mistakes": mistakes.get(),
         });
         if session_ready.get_untracked() {
             save_session(&blob);
@@ -290,6 +322,7 @@ fn App() -> impl IntoView {
             "at": js_sys::Date::new_0().to_iso_string().as_string().unwrap_or_default(),
             "lives": ph.lives.get_untracked(),
             "strokes": strokes.get_untracked(),
+            "mistakes": mistakes.get_untracked(),
         });
         solved_log.set(session::remember(entry));
     });
@@ -400,7 +433,7 @@ fn App() -> impl IntoView {
             });
             game.set(Some(rsp["game"].clone()));
             if rsp["solved"].as_bool() == Some(true) {
-                msg.set(Msg::Solved);
+                msg.set(Msg::Solved(mistakes.get_untracked()));
                 clear_session(); // a solved game is not worth resuming
             }
             true
@@ -446,6 +479,7 @@ fn App() -> impl IntoView {
             ph.reset();
             aiming.set(None);
             strokes.set(0);
+            mistakes.set(0);
             leave_arm.set(None);
             elapsed.set(0.0);
             running_since.set(Some(js_sys::Date::now()));
@@ -634,21 +668,19 @@ fn App() -> impl IntoView {
                 // he stays as he is, wrong and he draws one more stroke
                 // `before != v` matters: without it, holding a wrong key draws
                 // ten strokes in a second, and undo-then-retype charges twice
-                if accepted
-                    && !mark
-                    && v != 0
-                    && before != v
-                    && mode.get_untracked() == Mode::Hangman
-                {
+                if accepted && !mark && v != 0 && before != v {
                     if let Some(g) = game.get_untracked() {
                         if board_of(&g, "solution")[i] != v {
-                            strokes.update(|s| *s = (*s + 1).min(STROKES));
-                            let left = STROKES.saturating_sub(strokes.get_untracked());
-                            msg.set(if left == 0 {
-                                Msg::HangmanLost
-                            } else {
-                                Msg::HangmanDrew(left)
-                            });
+                            mistakes.update(|m| *m += 1);
+                            if mode.get_untracked() == Mode::Hangman {
+                                strokes.update(|s| *s = (*s + 1).min(STROKES));
+                                let left = STROKES.saturating_sub(strokes.get_untracked());
+                                msg.set(if left == 0 {
+                                    Msg::HangmanLost
+                                } else {
+                                    Msg::HangmanDrew(left)
+                                });
+                            }
                         }
                     }
                 }
@@ -896,7 +928,7 @@ fn App() -> impl IntoView {
             msg.set(Msg::BackClassic);
         } else {
             if game.get_untracked().as_ref().is_some_and(solved_game) {
-                msg.set(Msg::Solved);
+                msg.set(Msg::Solved(mistakes.get_untracked()));
                 return;
             }
             mode.set(Mode::Hangman);
@@ -1160,6 +1192,8 @@ fn App() -> impl IntoView {
                             };
                             let diff = e["difficulty"].as_str().unwrap_or("medium").to_string();
                             let has_grid = e["solution"].as_str().is_some_and(|s| s.len() == 81);
+                            // a clean grid earns a blank here, not a zero
+                            let slips = e["mistakes"].as_u64().unwrap_or(0);
                             view! {
                                 <li class="entry" class:openable=has_grid
                                     class:open=move || open_grid.get() == Some(idx)
@@ -1176,6 +1210,9 @@ fn App() -> impl IntoView {
                                     </span>
                                     <span class="howlong">
                                         {format!("{:02}:{:02}", secs / 60, secs % 60)}
+                                    </span>
+                                    <span class="slips">
+                                        {(slips > 0).then(|| format!("\u{00b7} {slips}"))}
                                     </span>
                                 </li>
                             }

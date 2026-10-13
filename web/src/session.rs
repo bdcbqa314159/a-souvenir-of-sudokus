@@ -83,6 +83,15 @@ pub fn clear_history() {
 ///
 /// The parameter must be exactly `dev`: a near miss like `?devgjljfda` is a
 /// stray URL, not a request for dev mode, and index.html turns it away.
+/// Whether this build has a dev mode to ask for at all. The query gate in
+/// index.html cannot know this — it is plain JavaScript, with no idea which
+/// profile compiled the wasm — so a release build turns `?dev` away itself,
+/// the moment it starts, rather than loading the game under a parameter that
+/// does nothing.
+pub fn dev_mode_exists() -> bool {
+    cfg!(debug_assertions)
+}
+
 pub fn dev_mode(query: &str) -> bool {
     cfg!(debug_assertions)
         && query
@@ -93,7 +102,7 @@ pub fn dev_mode(query: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::dev_mode;
+    use super::{dev_mode, dev_mode_exists};
 
     #[test]
     fn dev_mode_needs_both_the_query_and_a_debug_build() {
@@ -102,6 +111,13 @@ mod tests {
         // the whole point: in a release build the query is not enough
         assert_eq!(dev_mode("?dev"), cfg!(debug_assertions));
         assert_eq!(dev_mode("?pack=souvenir&dev"), cfg!(debug_assertions));
+    }
+
+    #[test]
+    fn a_release_build_has_no_dev_mode_to_ask_for() {
+        assert_eq!(dev_mode_exists(), cfg!(debug_assertions));
+        // and the two agree: where there is no dev mode, ?dev cannot turn it on
+        assert!(dev_mode_exists() || !dev_mode("?dev"));
     }
 
     #[test]

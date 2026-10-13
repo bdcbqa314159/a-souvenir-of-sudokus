@@ -342,6 +342,10 @@
       /* ...and the cells give back the height he occupies */
       .app.hangman-mode { --cell: min((100vw - 1.1rem) / 9, (100vh - 13rem - 18vh) / 9); }
     }
+    /* the wrong digits a finished grid cost, in his red beside the time */
+    .ledger .slips { color: var(--red); font-size: 0.82rem; min-width: 1.6rem;
+                     text-align: right; }
+
     /* a hint being aimed: the grid waits to be pointed at. Blank squares take
        the crosshair and answer the cursor; the filled ones stay as they are,
        since a hint has nothing to do there. */
