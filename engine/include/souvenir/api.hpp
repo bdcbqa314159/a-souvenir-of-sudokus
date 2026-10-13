@@ -10,7 +10,8 @@
 //   put         game, i, v                  -> game
 //   mark        game, i, v                  -> game (toggle pencil mark)
 //   clear_marks game, i                     -> game
-//   hint        game, seed?                 -> game, index (null when solved)
+//   hint        game, seed?, i?             -> game, index (null when solved,
+//                                                or when i is not a cell a hint could fill)
 //   check       game                        -> game, wrong: how many are wrong
 //   candidates  game                        -> game, candidates: 81 digit lists
 //   phantom     game, seed?                 -> game (see phantom_of)

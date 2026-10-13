@@ -401,6 +401,44 @@ TEST(AuditRegressions, PhantomOfSolvedBoardIsStillAPuzzle) {
   EXPECT_GE(zeros, 1); // clamped at 80 clues: never an already-solved "puzzle"
 }
 
+TEST(Api, HintCanBeAimedAtAChosenCell) {
+  using nlohmann::json;
+  auto call = [](json req) { return json::parse(souvenir::apply_command(req.dump())); };
+  json game = call({{"cmd", "new"}, {"difficulty", "easy"}, {"seed", 5}})["game"];
+
+  int empty = -1, given = -1;
+  for (int i = 0; i < 81; ++i) {
+    const bool clue = game["puzzle"][static_cast<std::size_t>(i)].get<int>() != 0;
+    if (clue && given < 0)
+      given = i;
+    if (!clue && empty < 0)
+      empty = i;
+  }
+  ASSERT_GE(empty, 0);
+  ASSERT_GE(given, 0);
+
+  // the cell the player pointed at is the cell that gets filled
+  json rsp = call({{"cmd", "hint"}, {"game", game}, {"i", empty}});
+  ASSERT_TRUE(rsp["ok"].get<bool>());
+  EXPECT_EQ(rsp["index"].get<int>(), empty);
+  EXPECT_EQ(rsp["game"]["board"][static_cast<std::size_t>(empty)].get<int>(),
+            game["solution"][static_cast<std::size_t>(empty)].get<int>());
+
+  // a cell no hint could fill is refused, and nothing moves
+  json at_given = call({{"cmd", "hint"}, {"game", game}, {"i", given}});
+  ASSERT_TRUE(at_given["ok"].get<bool>());
+  EXPECT_TRUE(at_given["index"].is_null());
+  EXPECT_EQ(at_given["game"]["board"], game["board"]);
+
+  // out of range is an error, not a silently ignored aim
+  EXPECT_EQ(call({{"cmd", "hint"}, {"game", game}, {"i", 999}})["ok"], false);
+
+  // and with no cell named it still picks one itself, as it always did
+  json anywhere = call({{"cmd", "hint"}, {"game", game}, {"seed", 2}});
+  ASSERT_TRUE(anywhere["ok"].get<bool>());
+  EXPECT_TRUE(anywhere["index"].is_number_integer());
+}
+
 TEST(AuditRegressions, CheckCannotBeUsedAsAnOracle) {
   using nlohmann::json;
   auto call = [](json req) { return json::parse(souvenir::apply_command(req.dump())); };
