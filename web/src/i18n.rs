@@ -48,7 +48,10 @@ impl Msg {
             Msg::Solved => tr.solved.into(),
             // a verdict should be readable before the words are: the mark
             // carries it in any language
-            Msg::Checking => "valvula check \u{1F609}\u{2026}".into(),
+            // the words only: the wink and the three dots are put back by the
+            // status line in main.rs, which animates them. The pun stays in
+            // Spanish in every language — it is his, not a translation.
+            Msg::Checking => "valvula check".into(),
             Msg::AllGood => format!("\u{2713} {}", tr.all_good),
             Msg::WrongCells(n) => format!("\u{2717} {}", fill(tr.wrong_cells, &n.to_string())),
             Msg::NewGame(d) => fill(tr.new_game_msg, diff_label(lang, d)),

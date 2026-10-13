@@ -1047,14 +1047,21 @@ fn App() -> impl IntoView {
                 let m = msg.get();
                 let words = m.text(lang.get());
                 if m == Msg::Checking {
-                    // the valvula page's inspection, in the status line
+                    // the valvula page's inspection, in the status line. The
+                    // wink sits outside the words on purpose: the words carry a
+                    // gradient clipped to the glyphs, and a colour emoji inside
+                    // that would be clipped away with them.
                     view! {
                         <span class="inspect" attr:aria-hidden="true">
                             <span class="glass">"\u{1F50D}"</span>
                             <span class="wrench">"\u{1F527}"</span>
                             <span class="gear">"\u{2699}\u{FE0F}"</span>
                         </span>
-                        {words}
+                        <span class="words">{words}</span>
+                        <span class="wink">"\u{1F609}"</span>
+                        <span class="dots" attr:aria-hidden="true">
+                            <span>"."</span><span>"."</span><span>"."</span>
+                        </span>
                     }.into_any()
                 } else {
                     words.into_any()
