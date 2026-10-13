@@ -321,8 +321,9 @@
     /* the reading beat: quiet, then the verdict lands. The whole line used to
        pulse; now the words carry the effect and the pulse stays as the
        reduced-motion fallback at the bottom of this block. */
-    .verdict-reading { color: var(--ink-soft); font-style: italic; opacity: 0.85; }
-    @keyframes breathe { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
+    /* no blanket opacity here: the travelling band below carries the softness,
+       and dimming the whole line on top of it flattened the effect to nothing */
+    .verdict-reading { color: var(--ink-soft); font-style: italic; }
     .verdict-reading .wink { font-style: normal; margin-left: 0.1em; }
     /* the three dots build up and clear, like the splash's loading dots */
     .verdict-reading .dots { letter-spacing: 0.08em; }
@@ -339,16 +340,18 @@
        path the words simply stay their normal colour. */
     @supports ((-webkit-background-clip: text) or (background-clip: text)) {
       .verdict-reading .words {
-        background-image: linear-gradient(100deg, var(--ink-soft) 0 38%,
-                          var(--ink) 48%, var(--ink-soft) 58% 100%);
-        background-size: 260% 100%; background-repeat: no-repeat;
+        /* faint ink either side, full ink in the band: the gap has to be wide
+           enough to see on one short italic line */
+        background-image: linear-gradient(100deg, rgba(26, 26, 26, 0.34) 0 34%,
+                          var(--ink) 50%, rgba(26, 26, 26, 0.34) 66% 100%);
+        background-size: 300% 100%; background-repeat: no-repeat;
         -webkit-background-clip: text; background-clip: text;
         color: transparent;
-        animation-name: reading; animation-duration: 1.9s;
+        animation-name: reading; animation-duration: 1.6s;
         animation-timing-function: linear; animation-iteration-count: infinite;
       }
-      @keyframes reading { from { background-position: 125% 0; }
-                           to   { background-position: -65% 0; } }
+      @keyframes reading { from { background-position: 130% 0; }
+                           to   { background-position: -70% 0; } }
     }
     /* the same inspection as the valvula page, at the pace of one check (1.3s):
        he looks it over, taps it, and the gear turns while the gauge reads.
@@ -383,14 +386,9 @@
       }
       .inspect .wrench { animation-delay: 0.22s; }
       .inspect .gear   { animation-delay: 0.44s; }
-      /* the travelling band is movement; the line breathes instead, and the
-         words must be given their colour back or they stay a clipped nothing */
-      .verdict-reading .words { animation-name: none; background-image: none;
-                                color: var(--ink-soft); }
-      .verdict-reading { animation-name: breathe; animation-duration: 1.3s;
-                         animation-timing-function: ease-in-out;
-                         animation-iteration-count: infinite; }
-      /* dots are light, not travel — they keep blinking */
+      /* the band along the words stays: nothing travels, the ink just
+         brightens under it — same reasoning as the three above. The dots keep
+         blinking for the same reason. */
     }
     @keyframes look { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
     /* check results read as a verdict: a mark, then the words */
