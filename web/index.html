@@ -4,6 +4,35 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>a-souvenir-of-sudokus</title>
+  <script>
+    // A URL nobody meant to type is a dead end. The game lives at the site
+    // root and reads exactly two knobs from the query string — any other path
+    // or parameter means someone is trying the door handles, and gets the
+    // valvula page instead of the grid. GitHub Pages already answers unknown
+    // paths with 404.html; this is the same answer on any host that falls back
+    // to index.html instead (trunk's dev server does, and so does the service
+    // worker offline). It runs before the engine module loads, so no board
+    // flashes first.
+    (function () {
+      var p = location.pathname, q = location.search.replace(/^\?/, "");
+      // the packaged app serves itself from its own protocol (tauri://, or
+      // http://tauri.localhost on Windows) — leave the webview alone
+      var web = (location.protocol === "http:" || location.protocol === "https:") &&
+                location.hostname !== "tauri.localhost";
+      var strayPath = web && !(p.endsWith("/") || p.endsWith("/index.html"));
+      var known = ["pack", "dev"];
+      var strayQuery = !!q && q.split("&").some(function (kv) {
+        return kv && known.indexOf(kv.split("=")[0]) < 0;
+      });
+      // never bounce the valvula page at itself, however it came to be served
+      if ((strayPath || strayQuery) && !p.endsWith("404.html")) {
+        var seg = p.split("/")[1];
+        // project pages live under /<repo>/; everywhere else the root is /
+        var root = location.hostname.endsWith("github.io") && seg ? "/" + seg + "/" : "/";
+        location.replace(root + "404.html?tried=" + encodeURIComponent(p + location.search));
+      }
+    })();
+  </script>
   <!-- PWA: installable ("Add to Home Screen") and playable offline -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#f7f2e8" />
@@ -13,6 +42,7 @@
   <link data-trunk rel="copy-file" href="../engine/build/wasm/souvenir.wasm" data-target-path="souvenir" />
   <link data-trunk rel="copy-dir" href="assets" />
   <link data-trunk rel="copy-file" href="manifest.webmanifest" />
+  <link data-trunk rel="copy-file" href="404.html" />
   <link data-trunk rel="copy-file" href="sw.js" />
   <link data-trunk rel="copy-dir" href="pwa" />
   <script type="module">
@@ -97,6 +127,39 @@
                      letter-spacing: 0.12em; margin: 1rem 0 0.3rem; }
     .rules-card p { line-height: 1.55; margin: 0.2rem 0; }
     .rules-card button { margin-top: 1rem; }
+    /* the ledger: a column of finished grids, read like a notebook page */
+    p.tally { color: var(--ink-soft); font-style: italic; margin: 0 0 0.6rem; }
+    ul.ledger { list-style: none; margin: 0; padding: 0;
+                max-height: 46vh; overflow: auto; }
+    ul.ledger li { display: grid; grid-template-columns: auto 1fr auto;
+                   gap: 0.8rem; align-items: baseline; padding: 0.3rem 0;
+                   border-bottom: 1px solid var(--line-faint); }
+    ul.ledger li:last-child { border-bottom: none; }
+    ul.ledger .when { color: var(--ink-soft); font-size: 0.82rem;
+                      font-variant-numeric: tabular-nums; }
+    ul.ledger .what { color: var(--ink); }
+    ul.ledger .howlong { color: var(--red); font-variant-numeric: tabular-nums; }
+    ul.ledger li.openable { cursor: pointer; }
+    ul.ledger li.openable:hover { background: var(--wash); }
+    ul.ledger li.open .when { color: var(--red); }
+    /* the finished grid, re-read: his givens in ink, your digits in red */
+    .mini-grid { display: grid; grid-template-columns: repeat(9, 1.5rem);
+                 border: 2px solid var(--red); margin: 0.9rem auto 0;
+                 width: max-content; background: var(--paper); }
+    .mini-cell { width: 1.5rem; height: 1.5rem; border: 1px solid var(--line-faint);
+                 box-sizing: border-box; display: flex;
+                 align-items: center; justify-content: center; }
+    .mini-cell .glyph { width: 78%; height: 78%; }
+    .mini-cell.cross-r { border-right: 2px solid var(--ink); }
+    .mini-cell.cross-b { border-bottom: 2px solid var(--ink); }
+    @media (max-width: 520px) {
+      .mini-grid { grid-template-columns: repeat(9, 1.15rem); }
+      .mini-cell { width: 1.15rem; height: 1.15rem; }
+    }
+    .card-actions { display: flex; justify-content: space-between;
+                    align-items: center; gap: 1rem; }
+    .card-actions button:first-child { color: var(--ink-soft);
+                                       border-color: var(--line-faint); }
     /* the button glossary: the term in the game's own red, its sense beside it */
     dl.controls { margin: 0.4rem 0 0; display: grid; grid-template-columns: auto 1fr;
                   gap: 0.45rem 0.9rem; align-items: baseline; }
@@ -248,13 +311,95 @@
     button.ask-hangman { border-color: var(--red); color: var(--red); }
     button.hidden { display: none; }
     @media (max-width: 520px) {
-      .board-row { gap: 0.4rem; }
-      svg.hangman { width: calc(var(--cell) * 2); }
+      /* beside the board, the hangman stole the width the grid needs; on a
+         phone he stands above it instead, and the board keeps the room */
+      .board-row { flex-direction: column-reverse; align-items: center; gap: 0.3rem; }
+      svg.hangman { width: auto; height: 17vh; max-height: 150px; margin: 0; }
+      /* ...and the cells give back the height he occupies */
+      .app.hangman-mode { --cell: min((100vw - 1.1rem) / 9, (100vh - 13rem - 18vh) / 9); }
     }
-    /* the reading beat: quiet, then the verdict lands */
-    .verdict-reading { color: var(--ink-soft); font-style: italic; opacity: 0.85;
-                       animation: breathe 1.3s ease-in-out infinite; }
-    @keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.95; } }
+    /* the reading beat: quiet, then the verdict lands. The whole line used to
+       pulse; now the words carry the effect and the pulse stays as the
+       reduced-motion fallback at the bottom of this block. */
+    /* no blanket opacity here: the travelling band below carries the softness,
+       and dimming the whole line on top of it flattened the effect to nothing */
+    .verdict-reading { color: var(--ink-soft); font-style: italic; }
+    .verdict-reading .wink { font-style: normal; margin-left: 0.1em; }
+    /* the three dots build up and clear, like the splash's loading dots */
+    .verdict-reading .dots { letter-spacing: 0.08em; }
+    .verdict-reading .dots span { animation-name: dotblink; animation-duration: 1.3s;
+                                  animation-timing-function: ease-in-out;
+                                  animation-iteration-count: infinite; }
+    .verdict-reading .dots span:nth-child(2) { animation-delay: 0.13s; }
+    .verdict-reading .dots span:nth-child(3) { animation-delay: 0.26s; }
+    @keyframes dotblink { 0%        { opacity: 0; }
+                          14%, 58%  { opacity: 1; }
+                          76%, 100% { opacity: 0; } }
+    /* and the sentence reads as being read: a brighter band of ink travels
+       along the words. Guarded — where the text cannot be used as a clipping
+       path the words simply stay their normal colour. */
+    @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+      .verdict-reading .words {
+        /* faint ink either side, full ink in the band: the gap has to be wide
+           enough to see on one short italic line */
+        background-image: linear-gradient(to right, rgba(26, 26, 26, 0.34) 0 30%,
+                          var(--ink) 50%, rgba(26, 26, 26, 0.34) 70% 100%);
+        background-size: 200% 100%;
+        /* both ends of the gradient are the same ink, so the tiling is
+           seamless — and tiling means no part of a letter is ever left
+           uncovered. Uncovered would mean invisible here: the glyphs have no
+           colour of their own, they are a window onto this gradient. */
+        background-repeat: repeat-x;
+        -webkit-background-clip: text; background-clip: text;
+        color: transparent;
+        animation-name: reading; animation-duration: 1.6s;
+        animation-timing-function: linear; animation-iteration-count: infinite;
+      }
+      /* one whole gradient period per cycle (the background is 200% wide), so
+         the loop restarts on exactly the pattern it ended with — half a period
+         was what made it stutter. The band crosses from the first letter to the
+         last, the direction the words are read. */
+      @keyframes reading { from { background-position-x: 200%; }
+                           to   { background-position-x: 0%; } }
+    }
+    /* the same inspection as the valvula page, at the pace of one check (1.3s):
+       he looks it over, taps it, and the gear turns while the gauge reads.
+       No shrug here — the verdict replaces the whole line. */
+    /* roomier than it was: with the fuller travel they would brush each other */
+    .inspect { display: inline-flex; gap: 0.32em; margin-right: 0.45em;
+               vertical-align: -0.08em; font-style: normal; font-size: 1.1em; }
+    /* longhands only, deliberately: an `animation` shorthand carrying no
+       keyframes name leaves the duration at 0s wherever the declaration is
+       not honoured, and a 0s animation is indistinguishable from a frozen one */
+    .inspect span { display: inline-block; animation-duration: 1.3s;
+                    animation-timing-function: ease-in-out;
+                    animation-iteration-count: infinite; }
+    .inspect .glass  { animation-name: sweep; }
+    .inspect .wrench { animation-name: tap; animation-delay: 0.15s; }
+    .inspect .gear   { animation-name: turn; animation-duration: 1.95s;
+                       animation-timing-function: linear; }
+    /* the travel the diagnosis page used, which is the one that reads */
+    @keyframes sweep { 0%, 100% { transform: translateX(-0.25em) rotate(-12deg); }
+                       50%      { transform: translateX(0.25em) rotate(12deg); } }
+    @keyframes tap   { 0%, 100% { transform: rotate(-18deg); }
+                       50%      { transform: rotate(14deg) translateY(0.06em); } }
+    @keyframes turn  { to { transform: rotate(360deg); } }
+    /* Motion sensitivity is about travel and rotation, not light: with reduce
+       asked for, nobody sweeps or turns, but the three still take their turn
+       brightening so the line reads as working rather than stuck. The breathing
+       of the words is opacity too, so it stays. */
+    @media (prefers-reduced-motion: reduce) {
+      .inspect .glass, .inspect .wrench, .inspect .gear {
+        animation-name: look; animation-duration: 1.3s;
+        animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+      }
+      .inspect .wrench { animation-delay: 0.22s; }
+      .inspect .gear   { animation-delay: 0.44s; }
+      /* the band along the words stays: nothing travels, the ink just
+         brightens under it — same reasoning as the three above. The dots keep
+         blinking for the same reason. */
+    }
+    @keyframes look { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
     /* check results read as a verdict: a mark, then the words */
     .verdict-good { color: var(--good); font-style: normal; }
     .verdict-bad { color: var(--red); font-style: normal; }

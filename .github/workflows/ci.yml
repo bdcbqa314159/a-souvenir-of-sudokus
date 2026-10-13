@@ -61,7 +61,9 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: jetli/trunk-action@v0.5.0
       - name: Web unit tests (host target)
-        run: cd web && cargo test
+        # release too: the dev-mode gate is compile-time, so only a release
+        # run proves ?dev cannot uncap the assists in a shipped build
+        run: cd web && cargo test && cargo test --release
       - name: Build web frontend
         run: cd web && trunk build --release
 

@@ -117,19 +117,28 @@ pub async fn load_pack(cand: String, manifest: RwSignal<Option<Manifest>>) -> bo
 }
 
 pub fn url_pack() -> Option<String> {
-    let search = window().location().search().unwrap_or_default();
-    for kv in search.trim_start_matches('?').split('&') {
-        if let Some(name) = kv.strip_prefix("pack=") {
-            if !name.is_empty()
+    pack_from_query(&window().location().search().unwrap_or_default())
+}
+
+/// The one value the URL is allowed to contribute: which pack to try first.
+/// A name is a bare directory under `assets/` — letters, digits, `-` and `_`,
+/// nothing longer than a plausible name. Anything else (a path, a scheme, a
+/// traversal, an essay) is not a pack name and is ignored, and even an accepted
+/// name only reorders the chain, so it cannot strand anyone on a packless page.
+fn pack_from_query(search: &str) -> Option<String> {
+    const MAX_NAME: usize = 32;
+    search
+        .trim_start_matches('?')
+        .split('&')
+        .filter_map(|kv| kv.strip_prefix("pack="))
+        .find(|name| {
+            !name.is_empty()
+                && name.len() <= MAX_NAME
                 && name
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-            {
-                return Some(format!("assets/{name}"));
-            }
-        }
-    }
-    None
+        })
+        .map(|name| format!("assets/{name}"))
 }
 
 /// Inline background style for one glyph: spritesheet position when the pack
@@ -171,6 +180,36 @@ pub fn digit_style(manifest: &Manifest, role: &str, digit: i64, cell: usize) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pack_names_from_the_url_stay_inside_assets() {
+        assert_eq!(
+            pack_from_query("?pack=souvenir"),
+            Some("assets/souvenir".into())
+        );
+        assert_eq!(
+            pack_from_query("?dev&pack=abuelo"),
+            Some("assets/abuelo".into())
+        );
+        for hostile in [
+            "",
+            "?pack=",
+            "?pack=../../originals",
+            "?pack=..%2F..%2Fetc",
+            "?pack=/etc/passwd",
+            "?pack=https://example.com/pack",
+            "?pack=a/b",
+            "?pack=a.b",
+            "?packs=souvenir",
+            "?mypack=souvenir",
+        ] {
+            assert_eq!(pack_from_query(hostile), None, "{hostile} must be ignored");
+        }
+        // an essay is not a pack name
+        let long = format!("?pack={}", "a".repeat(33));
+        assert_eq!(pack_from_query(&long), None);
+        assert!(pack_from_query(&format!("?pack={}", "a".repeat(32))).is_some());
+    }
 
     fn manifest() -> Manifest {
         let mut given = HashMap::new();

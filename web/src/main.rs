@@ -21,7 +21,7 @@ use engine::{board_of, cmd, solved_game, Manifest};
 use i18n::{detect_lang, diff_label, fill, save_lang, t, Lang, Mode, Msg};
 use pack::{digit_style, load_pack, pack, paper_store, sprite_url, url_pack};
 use phantom::{stall_ms, window_ms, Phantom, LIVES};
-use session::{clear_session, load_session, save_session};
+use session::{clear_session, dev_mode, load_session, save_session};
 
 const DIFFICULTIES: [&str; 3] = ["easy", "medium", "hard"];
 const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if free
@@ -51,12 +51,10 @@ fn App() -> impl IntoView {
     let hints_left = RwSignal::new(HINTS);
     let checks_left = RwSignal::new(CHECKS);
     let leave_arm: RwSignal<Option<f64>> = RwSignal::new(None); // phantom exit confirm
-                                                                // dev mode (?dev in the URL): assists uncapped — the debugging use survives
-    let dev = window()
-        .location()
-        .search()
-        .unwrap_or_default()
-        .contains("dev");
+                                                                // dev mode (?dev in the URL): assists uncapped and a solve button. Only in
+                                                                // debug builds — `trunk serve` is debug, every shipped path (pages, CI,
+                                                                // tauri) is --release, so no player can hand themselves a solved grid.
+    let dev = dev_mode(&window().location().search().unwrap_or_default());
     let flip_anim = RwSignal::new(false);
     // classic/souvenir toggle: shown only when a souvenir pack exists;
     // remembers WHICH one loaded (abuelo or souvenir) as the toggle target
@@ -66,6 +64,13 @@ fn App() -> impl IntoView {
     let session_ready = RwSignal::new(false);
     let show_rules = RwSignal::new(false);
     let check_gen = RwSignal::new(0u64);
+    let show_history = RwSignal::new(false);
+    // which remembered grid is open for a second look
+    let open_grid: RwSignal<Option<usize>> = RwSignal::new(None);
+    let solved_log: RwSignal<Vec<Value>> = RwSignal::new(session::load_history());
+    // one record per finished grid, written once: the effect fires on every
+    // change, so it must recognise a grid it has already remembered
+    let recorded: RwSignal<Option<String>> = RwSignal::new(None);
     let pack_switching = RwSignal::new(false);
     // the game clock: accumulated milliseconds plus the moment the current
     // stretch began. Time spent in another tab does not count — the player
@@ -110,16 +115,16 @@ fn App() -> impl IntoView {
             }
             gloo_timers::future::TimeoutFuture::new(50).await;
         }
-        let candidates = match url_pack() {
-            Some(p) => vec![p],
-            // abuelo (real scans, family builds from the main machine) wins
-            // over souvenir (generated pack, committed to the public repo)
-            None => vec![
-                "assets/abuelo".into(),
-                "assets/souvenir".into(),
-                "assets/placeholder".into(),
-            ],
-        };
+        // abuelo (real scans, family builds from the main machine) wins over
+        // souvenir (generated pack, committed to the public repo). ?pack= only
+        // moves one to the front: a name that does not resolve falls through to
+        // the usual chain, so a URL cannot leave anyone on a packless page.
+        let mut candidates: Vec<String> = url_pack().into_iter().collect();
+        candidates.extend([
+            "assets/abuelo".into(),
+            "assets/souvenir".into(),
+            "assets/placeholder".into(),
+        ]);
         let mut loaded = false;
         for cand in candidates {
             if load_pack(cand, manifest).await {
@@ -218,11 +223,18 @@ fn App() -> impl IntoView {
             return;
         }
         let m = mode.get();
+        // untracked: reading the live clock here made this effect re-run
+        // every 500ms, writing the whole session to storage twice a second —
+        // which a phone feels as lag on every digit
+        let elapsed_now = elapsed.get_untracked()
+            + running_since
+                .get_untracked()
+                .map_or(0.0, |t0| js_sys::Date::now() - t0);
         let blob = json!({
             "game": g,
             "mode": match m { Mode::Phantom => "phantom", Mode::Hangman => "hangman", _ => "classic" },
             "strokes": strokes.get(),
-            "elapsed": elapsed_ms(),
+            "elapsed": elapsed_now,
             "lives": ph.lives.get(),
             "over": ph.over.get(),
             "hints": hints_left.get(),
@@ -237,9 +249,43 @@ fn App() -> impl IntoView {
     // with a new game. This must be an effect: inside the view it would have
     // run once at construction and never again.
     Effect::new(move |_| {
-        if game.get().as_ref().is_some_and(solved_game) {
-            pause_clock();
+        let Some(g) = game.get() else { return };
+        if !solved_game(&g) {
+            return;
         }
+        pause_clock();
+        // the puzzle itself identifies the grid, so re-renders (or a reload
+        // of a finished board) cannot record it twice
+        let id = board_of(&g, "puzzle")
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<String>();
+        if recorded.get_untracked().as_deref() == Some(id.as_str()) {
+            return;
+        }
+        recorded.set(Some(id));
+        let secs = (elapsed_ms() / 1000.0) as u64;
+        let digits = |key: &str| {
+            board_of(&g, key)
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<String>()
+        };
+        let entry = json!({
+            "puzzle": digits("puzzle"),
+            "solution": digits("solution"),
+            "difficulty": g["difficulty"].as_str().unwrap_or("medium"),
+            "mode": match mode.get_untracked() {
+                Mode::Phantom => "phantom",
+                Mode::Hangman => "hangman",
+                _ => "classic",
+            },
+            "seconds": secs,
+            "at": js_sys::Date::new_0().to_iso_string().as_string().unwrap_or_default(),
+            "lives": ph.lives.get_untracked(),
+            "strokes": strokes.get_untracked(),
+        });
+        solved_log.set(session::remember(entry));
     });
 
     // a hidden tab still runs this clock while the player is elsewhere, which
@@ -424,9 +470,10 @@ fn App() -> impl IntoView {
 
     let key_action = move |key: &str| {
         // the overlay is modal: it was dealing new games behind itself
-        if show_rules.get_untracked() {
+        if show_rules.get_untracked() || show_history.get_untracked() {
             if key == "Escape" {
                 show_rules.set(false);
+                show_history.set(false);
             }
             return;
         }
@@ -897,7 +944,9 @@ fn App() -> impl IntoView {
             </button>
             <button on:click=move |_| key_action("u")>{move || t(lang.get()).undo}</button>
             <button on:click=move |_| key_action("r")>{move || t(lang.get()).redo}</button>
-            {dev.then(|| view! { <button on:click=move |_| key_action("S")>"solve"</button> })}
+            {dev.then(|| view! {
+                <button on:click=move |_| key_action("S")>{move || t(lang.get()).solve}</button>
+            })}
         </div>
         <div class="bar setup">
             <button on:click=move |_| key_action("n")>{move || t(lang.get()).new_game}</button>
@@ -979,6 +1028,11 @@ fn App() -> impl IntoView {
                     })
                     .collect::<Vec<_>>()}
             </span>
+            <button class="tipped" attr:aria-label=move || t(lang.get()).history
+                on:click=move |_| show_history.set(true)>
+                <span class="tip">{move || t(lang.get()).history}</span>
+                "♦"
+            </button>
             <button class="tipped" attr:aria-label=move || t(lang.get()).rules_btn
                 on:click=move |_| show_rules.set(true)>
                 <span class="tip">{move || t(lang.get()).rules_btn}</span>
@@ -988,9 +1042,116 @@ fn App() -> impl IntoView {
         <div class="msg" class:solved=solved class:lost-msg=move || ph.over.get()
              class:verdict-reading=move || msg.get() == Msg::Checking
              class:verdict-good=move || msg.get() == Msg::AllGood
-             class:verdict-bad=move || matches!(msg.get(), Msg::WrongCells(_))>{move || msg.get().text(lang.get())}</div>
+             class:verdict-bad=move || matches!(msg.get(), Msg::WrongCells(_))>
+            {move || {
+                let m = msg.get();
+                let words = m.text(lang.get());
+                if m == Msg::Checking {
+                    // the valvula page's inspection, in the status line. The
+                    // wink sits outside the words on purpose: the words carry a
+                    // gradient clipped to the glyphs, and a colour emoji inside
+                    // that would be clipped away with them.
+                    view! {
+                        <span class="inspect" attr:aria-hidden="true">
+                            <span class="glass">"\u{1F50D}"</span>
+                            <span class="wrench">"\u{1F527}"</span>
+                            <span class="gear">"\u{2699}\u{FE0F}"</span>
+                        </span>
+                        <span class="words">{words}</span>
+                        <span class="wink">"\u{1F609}"</span>
+                        <span class="dots" attr:aria-hidden="true">
+                            <span>"."</span><span>"."</span><span>"."</span>
+                        </span>
+                    }.into_any()
+                } else {
+                    words.into_any()
+                }
+            }}
+        </div>
         <div class="status">{status}</div>
         </div>
+        {move || show_history.get().then(|| view! {
+            <div class="rules-overlay" on:click=move |_| show_history.set(false)>
+                <div class="rules-card" on:click=|e| e.stop_propagation()>
+                    <h1>"a-souvenir-of-sudokus"</h1>
+                    <h2>{move || t(lang.get()).history}</h2>
+                    {move || {
+                        let all = solved_log.get();
+                        if all.is_empty() {
+                            return view! { <p>{t(lang.get()).history_empty}</p> }.into_any();
+                        }
+                        let rows = all.iter().take(60).enumerate().map(|(idx, e)| {
+                            let secs = e["seconds"].as_u64().unwrap_or(0);
+                            let when = e["at"].as_str().unwrap_or("").get(0..10).unwrap_or("").to_string();
+                            let m = e["mode"].as_str().unwrap_or("classic").to_string();
+                            let tr = t(lang.get());
+                            let mode_label = match m.as_str() {
+                                "phantom" => tr.phantom,
+                                "hangman" => tr.hangman,
+                                _ => tr.classic,
+                            };
+                            let diff = e["difficulty"].as_str().unwrap_or("medium").to_string();
+                            let has_grid = e["solution"].as_str().is_some_and(|s| s.len() == 81);
+                            view! {
+                                <li class="entry" class:openable=has_grid
+                                    class:open=move || open_grid.get() == Some(idx)
+                                    on:click=move |_| {
+                                        if has_grid {
+                                            open_grid.update(|o| {
+                                                *o = if *o == Some(idx) { None } else { Some(idx) }
+                                            });
+                                        }
+                                    }>
+                                    <span class="when">{when}</span>
+                                    <span class="what">
+                                        {diff_label(lang.get(), &diff)}" · "{mode_label}
+                                    </span>
+                                    <span class="howlong">
+                                        {format!("{:02}:{:02}", secs / 60, secs % 60)}
+                                    </span>
+                                </li>
+                            }
+                        }).collect::<Vec<_>>();
+                        let total = all.len();
+                        view! {
+                            <p class="tally">{fill(t(lang.get()).history_count, &total.to_string())}</p>
+                            <ul class="ledger">{rows}</ul>
+                            {move || open_grid.get().and_then(|i| solved_log.get().get(i).cloned()).map(|e| {
+                                let puzzle: Vec<u32> = e["puzzle"].as_str().unwrap_or("")
+                                    .chars().filter_map(|c| c.to_digit(10)).collect();
+                                let sol: Vec<u32> = e["solution"].as_str().unwrap_or("")
+                                    .chars().filter_map(|c| c.to_digit(10)).collect();
+                                let man = manifest.get();
+                                let cells = (0..81).map(|i| {
+                                    let v = *sol.get(i).unwrap_or(&0) as i64;
+                                    let given = puzzle.get(i).is_some_and(|p| *p != 0);
+                                    let style = man.as_ref().and_then(|m| {
+                                        digit_style(m, if given { "given" } else { "user" }, v, i)
+                                    });
+                                    view! {
+                                        <div class="mini-cell"
+                                             class:cross-r=move || i % 9 == 2 || i % 9 == 5
+                                             class:cross-b=move || (i / 9) == 2 || (i / 9) == 5>
+                                            {style.map(|s| view! { <div class="glyph" style=s></div> })}
+                                        </div>
+                                    }
+                                }).collect::<Vec<_>>();
+                                view! { <div class="mini-grid">{cells}</div> }
+                            })}
+                        }.into_any()
+                    }}
+                    <div class="card-actions">
+                        <button on:click=move |_| {
+                            session::clear_history();
+                            solved_log.set(Vec::new());
+                        }>{move || t(lang.get()).history_clear}</button>
+                        <button on:click=move |_| show_history.set(false)>
+                            {move || t(lang.get()).close}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        })}
         {move || show_rules.get().then(|| view! {
             <div class="rules-overlay" on:click=move |_| show_rules.set(false)>
                 <div class="rules-card" on:click=|e| e.stop_propagation()>
@@ -1013,6 +1174,7 @@ fn App() -> impl IntoView {
                         <dd>{move || t(lang.get()).ctl_undo}</dd>
                         <dt>{move || t(lang.get()).new_game}</dt><dd>{move || t(lang.get()).ctl_new}</dd>
                         <dt>{move || t(lang.get()).phantom}</dt><dd>{move || t(lang.get()).ctl_phantom}</dd>
+                        <dt>{move || t(lang.get()).history}</dt><dd>{move || t(lang.get()).ctl_history}</dd>
                         <dt>{move || t(lang.get()).hangman_ask}</dt><dd>{move || t(lang.get()).ctl_hangman}</dd>
                         <dt>{move || format!("souvenir · {}", t(lang.get()).classic)}</dt>
                         <dd>{move || t(lang.get()).ctl_pack}</dd>

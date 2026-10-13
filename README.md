@@ -4,8 +4,20 @@
 
 A sudoku game dedicated to *el abuelo*. The digits are an original generated
 typeface derived from his handwriting; the paper is drawn from measurements
-of his notebook. Classic mode, and a **phantom mode** where the puzzle flips
-into its phantom twin if you stall too long.
+of his notebook.
+
+Three ways to play:
+
+- **Classic** — pencil marks, three hints and three checks per grid.
+- **Phantom** — a pact with the clock. Stall too long and the haunting begins;
+  place a correct digit in time to ward it off, or the grid flips into its
+  phantom twin. Three lives, no assists.
+- **Hangman** — every digit you place is interrogated the moment it lands.
+  Right, and he stays as he is. Wrong, and he draws one more stroke of
+  himself. Ten mistakes finish the drawing.
+
+English, French and Spanish, switchable mid-game. Your grid is saved as you
+play, so you can close it and come back to it.
 
 ## Download the desktop app
 
@@ -16,11 +28,23 @@ Grab the file for your system from the
 | System | File | First-open note |
 |---|---|---|
 | **Windows** | `...WINDOWS-setup.exe` | if Windows says "protected your PC": *More info → Run anyway* (once) |
-| **Mac** | `...MACOS.zip` | unzip, drag to Applications; first open: *right-click → Open* (once) |
+| **Mac** | *use the browser version* | macOS blocks downloaded apps that aren't notarised by Apple; see the note below |
 | **Linux** | `...LINUX.AppImage` | `chmod +x`, then run |
 
 The warnings appear because the app isn't code-signed — it's a small family
 project. Full Windows walkthrough in three languages below.
+
+**On a Mac**, play in the browser — and if you want it to feel like an app,
+open the link in Safari and choose *File → Add to Dock*: an icon, its own
+window, and it works offline. If you'd rather have the real `.app`, download
+the zip, drag it to Applications, and run `xattr -cr
+/Applications/a-souvenir-of-sudokus.app` once in Terminal to clear the
+download quarantine.
+
+**Updates**: the desktop app checks for a newer release when it starts and
+offers to install it. Every update is signature-verified against a key baked
+into the app, so only genuine releases can install. The browser version
+updates itself on the next load.
 
 ---
 
@@ -142,5 +166,9 @@ node test_wasm.mjs
 - [x] IP: MIT code + all-rights-reserved assets, embedded stamps, authenticated invisible watermark (audited)
 - [x] Desktop app (Tauri) for macOS/Windows/Linux; browser play via GitHub Pages
 - [x] Phone-fit layout, session persistence, one-request spritesheet, composed load reveal
-- [ ] v0.1.0 release binaries · PWA (offline/installable) · Android APK
+- [x] PWA: installable from the browser, plays offline
+- [x] **v0.1.0 released** — signed binaries for macOS/Windows/Linux, built by CI
+- [x] Secure auto-update: signature-verified in-app install, prompted not silent
+- [x] Hangman mode: mistakes draw him, ten finish the drawing
+- [ ] Game history · hint targeting · Android APK
 - [x] Renderer finale — open the game with `?pack=souvenir` and it is written in his hand, on his paper
