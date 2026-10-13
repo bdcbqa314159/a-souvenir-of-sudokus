@@ -44,6 +44,11 @@ jobs:
           emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
           cmake --build engine/build/wasm -j
       - run: node test_wasm.mjs
+      # the engine is the only parser of input nobody trusts (the saved game
+      # lives in editable localStorage), so the fuzz harness from the #49
+      # audit runs on every push rather than when someone remembers it
+      - name: Fuzz the one wire surface
+        run: node fuzz_api.mjs 30000 1337
 
   web:
     runs-on: ubuntu-latest

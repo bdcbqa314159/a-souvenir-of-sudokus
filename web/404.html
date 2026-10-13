@@ -4,6 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>valvula check — a souvenir of sudokus</title>
+  <!-- This page keeps its script inline, unlike the game's, because it is
+       served for URLs at any depth and a relative src would miss. So
+       script-src has to allow inline here — in exchange everything else is
+       shut: it loads no image, no font, no stylesheet, and makes no request
+       of any kind, so connect-src is 'none' and nothing it ever shows (the
+       URL that was tried) can leave the page. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'unsafe-inline';
+    style-src 'unsafe-inline';
+    connect-src 'none';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none'" />
   <!--
     Served by GitHub Pages for any path that is not the game. Deliberately
     self-contained: no pack assets, no wasm, no stylesheet of its own — it is

@@ -4,6 +4,30 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>a-souvenir-of-sudokus</title>
+  <!-- Content-Security-Policy, as a meta because GitHub Pages cannot set
+       headers. What it is worth being clear about: script-src has to allow
+       inline, because trunk injects its own inline module to boot the Rust
+       wasm (and its autoreload script in dev) — a strict policy here does not
+       fail loudly, it just stops the game from starting. So this does not
+       defend against injected inline script; what it does defend is
+       everything leaving or entering from elsewhere: no foreign script, no
+       foreign image, no connection anywhere but back to this origin, no
+       plugins, and no rewriting of what relative URLs resolve against. With
+       no raw-HTML sink in the frontend (no inner_html, no eval) and no
+       user-generated content, that is the part that is worth having.
+       style-src must allow inline too: the stylesheet is in this file, and
+       every glyph is positioned by a style attribute. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self';
+    connect-src 'self';
+    worker-src 'self';
+    manifest-src 'self';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none'" />
   <script>
     // A URL nobody meant to type is a dead end. The game lives at the site
     // root and reads exactly two knobs from the query string — any other path
