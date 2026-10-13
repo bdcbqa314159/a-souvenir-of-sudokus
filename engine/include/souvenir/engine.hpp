@@ -93,7 +93,11 @@ public:
   bool is_solved() const { return board_ == solution_; }
 
   // Fill one empty-or-wrong cell with its solution value; returns the index.
-  std::optional<int> hint(std::optional<std::uint64_t> seed = std::nullopt);
+  // With a target, that cell is filled instead of a random one — and only if a
+  // hint could have filled it anyway: naming a cell that is already right is
+  // not a hint, and returns nullopt without touching the board.
+  std::optional<int> hint(std::optional<std::uint64_t> seed = std::nullopt,
+                          std::optional<int> target = std::nullopt);
 
   std::string to_json() const;
   static Game from_json(const std::string &text); // validates; throws std::invalid_argument

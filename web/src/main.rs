@@ -28,6 +28,10 @@ const HINTS: u32 = 3; // per game; check-undo would be a brute-force oracle if f
 const CHECKS: u32 = 3;
 /// gallows (4) + figure (6): he is drawn from nothing
 const STROKES: u32 = 10;
+/// How long the player has to point at a square before the hint goes wherever
+/// the engine likes: long enough to look over the grid, short enough that it
+/// is not a pause in the game.
+const AIM_MS: f64 = 12_000.0;
 const DIGIT_KEYS: [&str; 9] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 #[derive(Clone, Default)]
@@ -51,9 +55,11 @@ fn App() -> impl IntoView {
     let hints_left = RwSignal::new(HINTS);
     let checks_left = RwSignal::new(CHECKS);
     let leave_arm: RwSignal<Option<f64>> = RwSignal::new(None); // phantom exit confirm
-                                                                // dev mode (?dev in the URL): assists uncapped and a solve button. Only in
-                                                                // debug builds — `trunk serve` is debug, every shipped path (pages, CI,
-                                                                // tauri) is --release, so no player can hand themselves a solved grid.
+                                                                // a hint is aimed before it lands: Some(deadline) while the player chooses
+    let aiming: RwSignal<Option<f64>> = RwSignal::new(None);
+    // dev mode (?dev in the URL): assists uncapped and a solve button. Only in
+    // debug builds — `trunk serve` is debug, every shipped path (pages, CI,
+    // tauri) is --release, so no player can hand themselves a solved grid.
     let dev = dev_mode(&window().location().search().unwrap_or_default());
     let flip_anim = RwSignal::new(false);
     // classic/souvenir toggle: shown only when a souvenir pack exists;
@@ -405,12 +411,40 @@ fn App() -> impl IntoView {
         }
     };
 
+    // the hint lands: on the square the player pointed at, or wherever the
+    // engine likes when the window closes with nobody pointing. Aiming is
+    // offered only at blank squares, so a named square can always be filled —
+    // which keeps the old promise that a hint is charged only once it happened.
+    let fire_hint = move |target: Option<usize>| {
+        aiming.set(None);
+        let mut req = json!({"cmd": "hint"});
+        if let Some(i) = target {
+            req["i"] = json!(i);
+            selected.set(i); // the eye ends up where the digit does
+        }
+        if play(req) && !dev {
+            hints_left.update(|h| *h -= 1);
+        }
+    };
+
+    // the window closes on its own: nobody pointed, so the engine chooses
+    Effect::new(move |_| {
+        now.track();
+        if aiming
+            .get()
+            .is_some_and(|deadline| js_sys::Date::now() >= deadline)
+        {
+            fire_hint(None);
+        }
+    });
+
     let new_game = move |difficulty: String| {
         let rsp = cmd(json!({"cmd": "new", "difficulty": difficulty}));
         if rsp["ok"].as_bool() == Some(true) {
             game.set(Some(rsp["game"].clone()));
             history.set(History::default());
             ph.reset();
+            aiming.set(None);
             strokes.set(0);
             leave_arm.set(None);
             elapsed.set(0.0);
@@ -477,6 +511,10 @@ fn App() -> impl IntoView {
             }
             return;
         }
+        if key == "Escape" && aiming.get_untracked().is_some() {
+            fire_hint(None);
+            return;
+        }
         let i = selected.get_untracked();
         if ph.over.get_untracked() && key != "n" {
             return; // only a new game raises the dead
@@ -501,13 +539,16 @@ fn App() -> impl IntoView {
             "u" => undo(),
             "r" => redo(),
             "H" => {
+                // asked twice means stop deliberating and just pick one
+                if aiming.get_untracked().is_some() {
+                    fire_hint(None);
+                    return;
+                }
                 if !assist_allowed(hints_left, true) {
                     return;
                 }
-                // charge only when the hint actually happened
-                if play(json!({"cmd": "hint"})) && !dev {
-                    hints_left.update(|h| *h -= 1);
-                }
+                msg.set(Msg::None); // the prompt takes the line
+                aiming.set(Some(js_sys::Date::now() + AIM_MS));
             }
             // dev only: fill the whole board via hints, to see the glyphs in action
             "S" if dev => {
@@ -672,6 +713,7 @@ fn App() -> impl IntoView {
                     let progress = ((now.get() - t0) / window_ms(diff)).clamp(0.0, 1.0);
                     (board_of(&inc, "puzzle"), 0.08 + 0.45 * progress)
                 });
+        let aim = aiming.get().is_some();
         (0..81usize)
             .map(|i| {
                 let v = board[i];
@@ -683,7 +725,14 @@ fn App() -> impl IntoView {
                 if i / 9 == 2 || i / 9 == 5 {
                     class.push_str(" cross-b");
                 }
-                if i == sel {
+                // while a hint is being aimed the highlight steps back, so the
+                // board suggests nothing about where it should go, and blank
+                // squares advertise themselves instead
+                if aim {
+                    if v == 0 {
+                        class.push_str(" aimable");
+                    }
+                } else if i == sel {
                     class.push_str(" selected");
                 } else if v != 0 && v == sel_value {
                     class.push_str(" same");
@@ -711,7 +760,16 @@ fn App() -> impl IntoView {
                     })
                     .unwrap_or_default();
                 view! {
-                    <div class=class on:click=move |_| selected.set(i)>
+                    <div class=class on:click=move |_| {
+                        // the live signal, not the one this cell was drawn
+                        // with: a click decides what it is at the moment of
+                        // the click, never at the moment of the render
+                        if aiming.get_untracked().is_some() && v == 0 {
+                            fire_hint(Some(i));
+                        } else {
+                            selected.set(i);
+                        }
+                    }>
                         {value_img}
                         {ghost_img}
                         <div class="marks">{mark_imgs}</div>
@@ -875,7 +933,7 @@ fn App() -> impl IntoView {
         <div class="app" class:ready=ready class:phantom=move || mode.get() == Mode::Phantom
              class:hangman-mode=move || mode.get() == Mode::Hangman>
         <h1>"a-souvenir-of-sudokus"</h1>
-        <div class="board-row">
+        <div class="board-row" class:aiming=move || aiming.get().is_some()>
         <div class="grid" class:flipping=move || flip_anim.get() class:won=solved
              class:lost=move || match mode.get() {
                  Mode::Phantom => ph.over.get(),
@@ -1044,6 +1102,16 @@ fn App() -> impl IntoView {
              class:verdict-good=move || msg.get() == Msg::AllGood
              class:verdict-bad=move || matches!(msg.get(), Msg::WrongCells(_))>
             {move || {
+                // an aim in progress owns the line: it is asking a question
+                if let Some(deadline) = aiming.get() {
+                    now.track();
+                    let left = ((deadline - js_sys::Date::now()) / 1000.0).ceil().max(0.0);
+                    return view! {
+                        <span class="aim-prompt">
+                            {fill(t(lang.get()).aim, &format!("{left:.0}"))}
+                        </span>
+                    }.into_any();
+                }
                 let m = msg.get();
                 let words = m.text(lang.get());
                 if m == Msg::Checking {

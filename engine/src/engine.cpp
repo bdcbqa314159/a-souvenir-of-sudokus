@@ -309,7 +309,8 @@ std::vector<int> Game::wrong_cells() const {
   return out;
 }
 
-std::optional<int> Game::hint(std::optional<std::uint64_t> seed) {
+std::optional<int> Game::hint(std::optional<std::uint64_t> seed,
+                              std::optional<int> target) {
   std::vector<int> todo;
   for (int i = 0; i < kCells; ++i) {
     auto u = static_cast<std::size_t>(i);
@@ -318,6 +319,15 @@ std::optional<int> Game::hint(std::optional<std::uint64_t> seed) {
   }
   if (todo.empty())
     return std::nullopt;
+  // the player may name the cell. It is honoured only if it is one of the
+  // cells a hint could have filled, so a named given (or a cell already
+  // right) spends nothing and changes nothing.
+  if (target) {
+    if (std::find(todo.begin(), todo.end(), *target) == todo.end())
+      return std::nullopt;
+    apply(*target, solution_[static_cast<std::size_t>(*target)]);
+    return *target;
+  }
   auto rng = make_rng(seed);
   int i = todo[std::uniform_int_distribution<std::size_t>{0, todo.size() - 1}(rng)];
   apply(i, solution_[static_cast<std::size_t>(i)]);
