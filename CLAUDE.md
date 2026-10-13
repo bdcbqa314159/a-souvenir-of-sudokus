@@ -72,6 +72,42 @@ baked into the binary, so an unsigned or foreign-signed update is refused.
 - A clone without the key still builds — `build-desktop.sh` then disables
   update artifacts rather than failing.
 
+## Security posture (what is defended, and what is not)
+
+- `apply_command` is the only parser of input nobody trusts: the saved game
+  lives in editable localStorage. It validates exactly 81 integer cells,
+  range-checked on the wide type before narrowing, with a nesting-depth guard,
+  and never throws. `fuzz_api.mjs` (30k hostile requests) runs in CI on every
+  push — not on request.
+- The frontend has no raw-HTML sink: no `inner_html`, no `eval`. Leptos escapes
+  text nodes; the valvula page writes `textContent` only.
+- `?dev` is debug-build-only (`cfg!(debug_assertions)` plus an exact key), so
+  it cannot uncap assists in anything a player receives. CI runs the web tests
+  in release as well, because only a release run can prove the gate holds.
+- Stray paths and unknown query parameters go to the valvula page before the
+  engine loads (`web/gate.js`). The game reads exactly two knobs: `pack`
+  (whitelisted charset, 32 chars, only reorders the pack chain) and `dev`.
+- CSP: both web pages carry one as a `<meta>`, since Pages cannot set headers.
+  Neither forbids inline script, and `index.html` cannot: **trunk injects its
+  own inline module to boot the Rust wasm**, so a strict `script-src` there
+  stops the game from starting — silently, the way every CSP violation does.
+  What the policy does buy is the outward direction: no foreign script or
+  image, `connect-src 'self'`, `object-src`/`base-uri 'none'`. `404.html` is
+  stricter still (`default-src 'none'`, `connect-src 'none'`) because it loads
+  nothing and calls nobody; it keeps its script inline because it is served
+  for URLs at any depth, where a relative `src` would miss.
+- `tauri.conf.json` keeps `"csp": null` **deliberately**: the webview serves
+  only bundled assets, updates are Ed25519-verified before they are ever
+  unpacked, and there is no remote content to constrain — while a wrong policy
+  would silently break the IPC the launch-time update check rides on. Revisit
+  only with a desktop build in hand to test it.
+- Not defended, and cannot be: the solution is client-side. Every engine
+  response carries the game, and the game carries `solution`, because hangman
+  judges each digit as it lands and the ledger stores finished grids. `check`
+  reports how many cells are wrong, never which, so it is not a map — but a
+  player with developer tools has the answer regardless. A serverless game
+  cannot keep its answer from its own client.
+
 ## Known flakes & gotchas
 
 - The Tauri build sometimes fails its first run after asset changes
