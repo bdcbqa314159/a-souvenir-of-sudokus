@@ -88,13 +88,14 @@
                           14%, 58%  { opacity: 1; }
                           76%, 100% { opacity: 0; } }
     /* and a brighter band of his red travels along the words, as if being
-       read. Guarded: where text cannot be a clipping path the words simply
-       keep their colour. The band tiles (matching ends) and stays within
-       0-100%, so no letter is ever left uncovered — uncovered would be
-       invisible, since the glyphs have no colour of their own here. */
+       read. Three things this depends on: the @supports guard (where text
+       cannot be a clipping path the words simply keep their colour), the
+       tiling (matching ends, so no letter is ever left uncovered — uncovered
+       means invisible, the glyphs having no colour of their own here), and a
+       cycle of exactly one gradient period, or the loop stutters. */
     @supports ((-webkit-background-clip: text) or (background-clip: text)) {
       h1 .words {
-        background-image: linear-gradient(100deg, rgba(181, 39, 29, 0.38) 0 30%,
+        background-image: linear-gradient(to right, rgba(181, 39, 29, 0.38) 0 30%,
                           var(--red) 50%, rgba(181, 39, 29, 0.38) 70% 100%);
         background-size: 200% 100%; background-repeat: repeat-x;
         -webkit-background-clip: text; background-clip: text;
@@ -102,7 +103,7 @@
         animation-name: reading; animation-duration: 1.9s;
         animation-timing-function: linear; animation-iteration-count: infinite;
       }
-      @keyframes reading { from { background-position-x: 100%; }
+      @keyframes reading { from { background-position-x: 200%; }
                            to   { background-position-x: 0%; } }
     }
     p { color: var(--ink-soft); margin: 0.5rem 0; line-height: 1.5; }

@@ -342,7 +342,7 @@
       .verdict-reading .words {
         /* faint ink either side, full ink in the band: the gap has to be wide
            enough to see on one short italic line */
-        background-image: linear-gradient(100deg, rgba(26, 26, 26, 0.34) 0 30%,
+        background-image: linear-gradient(to right, rgba(26, 26, 26, 0.34) 0 30%,
                           var(--ink) 50%, rgba(26, 26, 26, 0.34) 70% 100%);
         background-size: 200% 100%;
         /* both ends of the gradient are the same ink, so the tiling is
@@ -355,10 +355,11 @@
         animation-name: reading; animation-duration: 1.6s;
         animation-timing-function: linear; animation-iteration-count: infinite;
       }
-      /* 100% puts the band at the first letter, 0% at the last: it reads the
-         words in the direction they are read. Staying inside 0-100% is what
-         keeps the gradient over the text at every frame. */
-      @keyframes reading { from { background-position-x: 100%; }
+      /* one whole gradient period per cycle (the background is 200% wide), so
+         the loop restarts on exactly the pattern it ended with — half a period
+         was what made it stutter. The band crosses from the first letter to the
+         last, the direction the words are read. */
+      @keyframes reading { from { background-position-x: 200%; }
                            to   { background-position-x: 0%; } }
     }
     /* the same inspection as the valvula page, at the pace of one check (1.3s):
