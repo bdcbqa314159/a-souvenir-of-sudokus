@@ -167,8 +167,10 @@ node test_wasm.mjs
 - [x] Desktop app (Tauri) for macOS/Windows/Linux; browser play via GitHub Pages
 - [x] Phone-fit layout, session persistence, one-request spritesheet, composed load reveal
 - [x] PWA: installable from the browser, plays offline
-- [x] **v0.1.0 released** — signed binaries for macOS/Windows/Linux, built by CI
+- [x] **Released** — signed binaries for macOS/Windows/Linux, built by CI
 - [x] Secure auto-update: signature-verified in-app install, prompted not silent
 - [x] Hangman mode: mistakes draw him, ten finish the drawing
-- [ ] Game history · hint targeting · Android APK
+- [x] A clock on every grid, and a ledger of the finished ones — re-openable
+- [x] Hints you aim and can see land; pencil marks placed, and in pencil
+- [ ] Android APK
 - [x] Renderer finale — open the game with `?pack=souvenir` and it is written in his hand, on his paper
