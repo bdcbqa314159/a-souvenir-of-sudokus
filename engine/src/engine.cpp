@@ -309,8 +309,7 @@ std::vector<int> Game::wrong_cells() const {
   return out;
 }
 
-std::optional<int> Game::hint(std::optional<std::uint64_t> seed,
-                              std::optional<int> target) {
+std::optional<int> Game::hint(std::optional<std::uint64_t> seed, std::optional<int> target) {
   std::vector<int> todo;
   for (int i = 0; i < kCells; ++i) {
     auto u = static_cast<std::size_t>(i);
