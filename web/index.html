@@ -326,8 +326,9 @@
     /* the same inspection as the valvula page, at the pace of one check (1.3s):
        he looks it over, taps it, and the gear turns while the gauge reads.
        No shrug here — the verdict replaces the whole line. */
-    .inspect { display: inline-flex; gap: 0.18em; margin-right: 0.4em;
-               vertical-align: -0.06em; font-style: normal; }
+    /* roomier than it was: with the fuller travel they would brush each other */
+    .inspect { display: inline-flex; gap: 0.32em; margin-right: 0.45em;
+               vertical-align: -0.08em; font-style: normal; font-size: 1.1em; }
     /* longhands only, deliberately: an `animation` shorthand carrying no
        keyframes name leaves the duration at 0s wherever the declaration is
        not honoured, and a 0s animation is indistinguishable from a frozen one */
@@ -338,10 +339,11 @@
     .inspect .wrench { animation-name: tap; animation-delay: 0.15s; }
     .inspect .gear   { animation-name: turn; animation-duration: 1.95s;
                        animation-timing-function: linear; }
-    @keyframes sweep { 0%, 100% { transform: translateX(-0.12em) rotate(-10deg); }
-                       50%      { transform: translateX(0.12em) rotate(10deg); } }
-    @keyframes tap   { 0%, 100% { transform: rotate(-14deg); }
-                       50%      { transform: rotate(12deg) translateY(0.05em); } }
+    /* the travel the diagnosis page used, which is the one that reads */
+    @keyframes sweep { 0%, 100% { transform: translateX(-0.25em) rotate(-12deg); }
+                       50%      { transform: translateX(0.25em) rotate(12deg); } }
+    @keyframes tap   { 0%, 100% { transform: rotate(-18deg); }
+                       50%      { transform: rotate(14deg) translateY(0.06em); } }
     @keyframes turn  { to { transform: rotate(360deg); } }
     /* Motion sensitivity is about travel and rotation, not light: with reduce
        asked for, nobody sweeps or turns, but the three still take their turn
