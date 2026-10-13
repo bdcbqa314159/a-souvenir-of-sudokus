@@ -95,7 +95,7 @@ impl Msg {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)] // Debug so a failing mode test names the mode
 pub enum Mode {
     Classic,
     Phantom,
