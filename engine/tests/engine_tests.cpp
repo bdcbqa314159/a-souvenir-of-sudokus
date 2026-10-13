@@ -136,7 +136,8 @@ TEST(Api, CommandRoundTrip) {
   EXPECT_EQ(rsp["game"]["board"][static_cast<std::size_t>(empty)].get<int>(), right);
 
   rsp = call({{"cmd", "check"}, {"game", rsp["game"]}});
-  EXPECT_TRUE(rsp["wrong"].empty());
+  EXPECT_TRUE(rsp["wrong"].is_number_integer()); // a count, never positions
+  EXPECT_EQ(rsp["wrong"].get<int>(), 0);
 
   rsp = call({{"cmd", "hint"}, {"game", game}, {"seed", 1}});
   ASSERT_TRUE(rsp["ok"].get<bool>());
@@ -398,6 +399,48 @@ TEST(AuditRegressions, PhantomOfSolvedBoardIsStillAPuzzle) {
   for (int v : p.puzzle())
     zeros += (v == 0);
   EXPECT_GE(zeros, 1); // clamped at 80 clues: never an already-solved "puzzle"
+}
+
+TEST(AuditRegressions, CheckCannotBeUsedAsAnOracle) {
+  using nlohmann::json;
+  auto call = [](json req) { return json::parse(souvenir::apply_command(req.dump())); };
+  json game = call({{"cmd", "new"}, {"difficulty", "easy"}, {"seed", 11}})["game"];
+
+  // the trick this closes: put the same digit in every empty cell, then check.
+  // When check named positions, the cells it did NOT name were precisely the
+  // cells whose answer was that digit — one move and one check for a ninth of
+  // the grid. Now the answer is a number, which cannot be read as a map.
+  int filled = 0;
+  for (int i = 0; i < 81; ++i) {
+    if (game["puzzle"][static_cast<std::size_t>(i)].get<int>() != 0)
+      continue;
+    json rsp = call({{"cmd", "put"}, {"game", game}, {"i", i}, {"v", 7}});
+    ASSERT_TRUE(rsp["ok"].get<bool>()) << rsp.dump();
+    game = rsp["game"];
+    ++filled;
+  }
+  ASSERT_GT(filled, 0);
+
+  json checked = call({{"cmd", "check"}, {"game", game}});
+  ASSERT_TRUE(checked["ok"].get<bool>());
+  EXPECT_TRUE(checked["wrong"].is_number_integer()) << "the wire must not carry positions";
+  EXPECT_FALSE(checked["wrong"].is_array());
+  // every seven that is not where a seven belongs, and nothing about where
+  const int wrong = checked["wrong"].get<int>();
+  EXPECT_GT(wrong, 0);
+  EXPECT_LE(wrong, filled);
+
+  // the count is honest: a board filled correctly reports none wrong
+  json solved = call({{"cmd", "new"}, {"difficulty", "easy"}, {"seed", 12}})["game"];
+  for (int i = 0; i < 81; ++i) {
+    if (solved["puzzle"][static_cast<std::size_t>(i)].get<int>() != 0)
+      continue;
+    const int right = solved["solution"][static_cast<std::size_t>(i)].get<int>();
+    solved = call({{"cmd", "put"}, {"game", solved}, {"i", i}, {"v", right}})["game"];
+  }
+  json clean = call({{"cmd", "check"}, {"game", solved}});
+  EXPECT_EQ(clean["wrong"].get<int>(), 0);
+  EXPECT_TRUE(clean["solved"].get<bool>());
 }
 
 TEST(AuditRegressions, WireSurfaceHardening) {

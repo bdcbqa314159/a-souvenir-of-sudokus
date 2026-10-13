@@ -23,7 +23,8 @@ rsp = call({ cmd: "put", game, i, v: game.solution[i] });
 assert(rsp.ok && rsp.game.board[i] === game.solution[i], "put");
 
 rsp = call({ cmd: "check", game: rsp.game });
-assert(rsp.ok && rsp.wrong.length === 0, "check");
+assert(rsp.ok && rsp.wrong === 0, "check counts");
+assert(!Array.isArray(rsp.wrong), "check must not name positions");
 
 rsp = call({ cmd: "hint", game, seed: 1 });
 assert(rsp.ok && Number.isInteger(rsp.index), "hint");

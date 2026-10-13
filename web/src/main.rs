@@ -536,7 +536,7 @@ fn App() -> impl IntoView {
                     if !dev {
                         checks_left.update(|c| *c -= 1);
                     }
-                    let n = rsp["wrong"].as_array().map(Vec::len).unwrap_or(0);
+                    let n = rsp["wrong"].as_u64().unwrap_or(0) as usize;
                     // two beats: the gauge reads, then it reports — a verdict
                     // that appears instantly reads as if nothing was checked
                     // a generation token, not the message itself: an unrelated
