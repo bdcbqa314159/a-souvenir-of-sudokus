@@ -32,21 +32,29 @@
     .checking { font-size: clamp(2.2rem, 11vw, 3.4rem); height: 1.6em;
                 display: flex; align-items: center; justify-content: center;
                 gap: 0.35em; }
-    .checking span { display: inline-block; animation: 2.4s ease-in-out infinite; }
+    /* longhands only, deliberately: an `animation` shorthand carrying no
+       keyframes name leaves the duration at 0s wherever the declaration is
+       not honoured, and a 0s animation is indistinguishable from a frozen one */
+    .checking span { display: inline-block; animation-duration: 2.4s;
+                     animation-timing-function: ease-in-out;
+                     animation-iteration-count: infinite; }
     .glass  { animation-name: sweep; }
     .wrench { animation-name: tap; animation-delay: 0.2s; }
     .gear   { animation-name: turn; animation-duration: 3.6s;
               animation-timing-function: linear; }
-    .shrug  { animation-name: arrive; animation-delay: 0.9s;
-              animation-fill-mode: both; }
+    /* he arrives, holds the shrug, then takes the same move backwards and is
+       gone — the cycle ends where it begins, so the loop has no seam */
+    .shrug  { animation-name: leave; animation-delay: 0.9s; }
     @keyframes sweep  { 0%, 100% { transform: translateX(-0.35em) rotate(-12deg); }
                         50%      { transform: translateX(0.35em) rotate(12deg); } }
     @keyframes tap    { 0%, 100% { transform: rotate(-18deg); }
                         50%      { transform: rotate(14deg) translateY(0.06em); } }
     @keyframes turn   { to { transform: rotate(360deg); } }
-    @keyframes arrive { 0%   { transform: translateY(0.5em) scale(0.6); opacity: 0; }
-                        60%  { transform: translateY(-0.1em) scale(1.06); opacity: 1; }
-                        100% { transform: none; opacity: 1; } }
+    @keyframes leave  { 0%   { transform: translateY(0.5em) scale(0.6); opacity: 0; }
+                        18%  { transform: translateY(-0.1em) scale(1.06); opacity: 1; }
+                        28%  { transform: none; opacity: 1; }
+                        64%  { transform: none; opacity: 1; }
+                        100% { transform: translateY(0.5em) scale(0.6); opacity: 0; } }
     /* asked not to be moved: nobody sweeps or turns, but the three still take
        their turn brightening, so the inspection reads as an inspection. Light
        is not motion. The shrug simply arrives, without the bounce. */
@@ -57,10 +65,14 @@
       }
       .wrench { animation-delay: 0.28s; }
       .gear   { animation-delay: 0.56s; }
-      .shrug  { animation-name: appear; animation-duration: 0.4s; }
+      /* same coming and going, carried by light instead of movement — and on
+         the shortened cycle the other three use here, so they stay in step */
+      .shrug  { animation-name: leave-still; animation-duration: 1.6s;
+                animation-delay: 0.9s; }
     }
-    @keyframes look   { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-    @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes look        { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+    @keyframes leave-still { 0% { opacity: 0; } 22%, 64% { opacity: 1; }
+                             100% { opacity: 0; } }
 
     h1 { font-size: clamp(1.5rem, 7vw, 2.1rem); color: var(--red);
          margin: 0.6rem 0 0.2rem; font-weight: normal; letter-spacing: 0.01em; }

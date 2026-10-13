@@ -328,7 +328,12 @@
        No shrug here — the verdict replaces the whole line. */
     .inspect { display: inline-flex; gap: 0.18em; margin-right: 0.4em;
                vertical-align: -0.06em; font-style: normal; }
-    .inspect span { display: inline-block; animation: 1.3s ease-in-out infinite; }
+    /* longhands only, deliberately: an `animation` shorthand carrying no
+       keyframes name leaves the duration at 0s wherever the declaration is
+       not honoured, and a 0s animation is indistinguishable from a frozen one */
+    .inspect span { display: inline-block; animation-duration: 1.3s;
+                    animation-timing-function: ease-in-out;
+                    animation-iteration-count: infinite; }
     .inspect .glass  { animation-name: sweep; }
     .inspect .wrench { animation-name: tap; animation-delay: 0.15s; }
     .inspect .gear   { animation-name: turn; animation-duration: 1.95s;
