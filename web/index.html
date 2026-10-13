@@ -201,8 +201,11 @@
     /* translucent, so a pack's paper background shows through the board */
     .cell.selected { background: var(--gold); }
     .cell.same { background: var(--gold-faint); }
-    .marks { position: absolute; inset: 2px; display: flex; flex-wrap: wrap;
-             align-content: flex-start; gap: 1px; }
+    /* a 3x3 of its own, so each mark sits where its digit sits on the keypad:
+       1 top left, 9 bottom right. Reading a wrapped row of them was work. */
+    .marks { position: absolute; inset: 2px; display: grid;
+             grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+             place-items: center; }
     .cell div.ghost { position: absolute; width: 78%; height: 78%; left: 11%; top: 11%;
                       transition: opacity 0.6s linear; pointer-events: none;
                       filter: blur(0.4px); }
@@ -226,7 +229,13 @@
       40%  { opacity: 0.12; filter: blur(3px); }
       100% { opacity: 1; filter: none; }
     }
-    .marks div.glyph { width: calc(var(--cell) * 0.27); height: calc(var(--cell) * 0.27); opacity: 0.75; }
+    /* ...and they read as pencil, not as ink written small: his hand in
+       graphite, lighter than the digit it is a guess about. The glyphs are the
+       same red ink, so the grey comes from draining the colour out of them
+       rather than from a second set of assets. */
+    .marks div.glyph { width: calc(var(--cell) * 0.29); height: calc(var(--cell) * 0.29);
+                       filter: grayscale(1) brightness(1.25) contrast(0.82);
+                       opacity: 0.66; }
     .bar { margin-top: 0.55rem; display: flex; gap: 0.45rem; flex-wrap: wrap;
            justify-content: center; align-items: center; max-width: calc(var(--cell) * 9 + 4px); }
     .bar.palette { margin-top: 0.9rem; gap: 0.32rem; }
@@ -345,6 +354,28 @@
     /* the wrong digits a finished grid cost, in his red beside the time */
     .ledger .slips { color: var(--red); font-size: 0.82rem; min-width: 1.6rem;
                      text-align: right; }
+
+    /* a hint landing: the square takes a ring of his red that blooms and
+       fades, and the digit soaks in rather than appearing. The point is to be
+       found by the eye without having to hunt the grid for what changed. */
+    .cell.landed { animation-name: bloom; animation-duration: 1.4s;
+                   animation-timing-function: ease-out; animation-iteration-count: 1; }
+    .cell.landed div.value { animation-name: soak; animation-duration: 0.55s;
+                             animation-timing-function: ease-out;
+                             animation-iteration-count: 1; }
+    @keyframes bloom { 0%   { box-shadow: inset 0 0 0 2px rgba(181, 39, 29, 0.85),
+                                          0 0 12px 2px rgba(181, 39, 29, 0.35); }
+                       60%  { box-shadow: inset 0 0 0 2px rgba(181, 39, 29, 0.45),
+                                          0 0 8px 1px rgba(181, 39, 29, 0.14); }
+                       100% { box-shadow: inset 0 0 0 2px rgba(181, 39, 29, 0),
+                                          0 0 0 0 rgba(181, 39, 29, 0); } }
+    @keyframes soak  { 0%   { opacity: 0; transform: scale(0.74); }
+                       55%  { opacity: 1; transform: scale(1.07); }
+                       100% { opacity: 1; transform: none; } }
+    /* asked not to be moved: the ring still says where, without the swell */
+    @media (prefers-reduced-motion: reduce) {
+      .cell.landed div.value { animation-name: none; }
+    }
 
     /* a hint being aimed: the grid waits to be pointed at. Blank squares take
        the crosshair and answer the cursor; the filled ones stay as they are,
