@@ -47,11 +47,20 @@
     @keyframes arrive { 0%   { transform: translateY(0.5em) scale(0.6); opacity: 0; }
                         60%  { transform: translateY(-0.1em) scale(1.06); opacity: 1; }
                         100% { transform: none; opacity: 1; } }
-    /* a still frame for anyone who asked not to be moved */
+    /* asked not to be moved: nobody sweeps or turns, but the three still take
+       their turn brightening, so the inspection reads as an inspection. Light
+       is not motion. The shrug simply arrives, without the bounce. */
     @media (prefers-reduced-motion: reduce) {
-      .checking span { animation: none; }
-      .shrug { opacity: 1; }
+      .glass, .wrench, .gear {
+        animation-name: look; animation-duration: 1.6s;
+        animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+      }
+      .wrench { animation-delay: 0.28s; }
+      .gear   { animation-delay: 0.56s; }
+      .shrug  { animation-name: appear; animation-duration: 0.4s; }
     }
+    @keyframes look   { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+    @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
 
     h1 { font-size: clamp(1.5rem, 7vw, 2.1rem); color: var(--red);
          margin: 0.6rem 0 0.2rem; font-weight: normal; letter-spacing: 0.01em; }
@@ -91,7 +100,13 @@
       es: { line: "nada por aquí. Esta cuadrícula nunca se dibujó.",
             back: "volver a los sudokus" }
     };
-    var t = L[(navigator.language || "en").slice(0, 2).toLowerCase()] || L.en;
+    // the language the player chose in the game wins over the browser's: the
+    // game stores it under "lang" (same origin, so it is readable here), and
+    // only falls back to navigator when nobody has chosen yet
+    var chosen = null;
+    try { chosen = localStorage.getItem("lang"); } catch (e) { /* storage blocked */ }
+    var code = (chosen || navigator.language || "en").slice(0, 2).toLowerCase();
+    var t = L[code] || L.en;
     document.getElementById("line").textContent = t.line;
     // a bad path lands here directly; a bad query string is sent here by the
     // game's own door check, which passes the URL it turned away
@@ -106,7 +121,7 @@
     var home = document.getElementById("home");
     home.textContent = t.back;
     home.href = location.hostname.endsWith("github.io") ? "/a-souvenir-of-sudokus/" : "/";
-    document.documentElement.lang = t === L.fr ? "fr" : t === L.es ? "es" : "en";
+    document.documentElement.lang = L[code] ? code : "en";
   </script>
 </body>
 </html>

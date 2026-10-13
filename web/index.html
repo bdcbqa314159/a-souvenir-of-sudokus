@@ -338,10 +338,19 @@
     @keyframes tap   { 0%, 100% { transform: rotate(-14deg); }
                        50%      { transform: rotate(12deg) translateY(0.05em); } }
     @keyframes turn  { to { transform: rotate(360deg); } }
+    /* Motion sensitivity is about travel and rotation, not light: with reduce
+       asked for, nobody sweeps or turns, but the three still take their turn
+       brightening so the line reads as working rather than stuck. The breathing
+       of the words is opacity too, so it stays. */
     @media (prefers-reduced-motion: reduce) {
-      .inspect span { animation: none; }
-      .verdict-reading { animation: none; }
+      .inspect .glass, .inspect .wrench, .inspect .gear {
+        animation-name: look; animation-duration: 1.3s;
+        animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+      }
+      .inspect .wrench { animation-delay: 0.22s; }
+      .inspect .gear   { animation-delay: 0.44s; }
     }
+    @keyframes look { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
     /* check results read as a verdict: a mark, then the words */
     .verdict-good { color: var(--good); font-style: normal; }
     .verdict-bad { color: var(--red); font-style: normal; }
