@@ -115,6 +115,12 @@ baked into the binary, so an unsigned or foreign-signed update is refused.
   occasionally needs a second invocation.
 - The browser caches glyphs by filename: after regenerating assets, HARD
   refresh (Cmd+Shift+R; Ctrl+Shift+R on Windows).
+- `trunk serve` watches `web/`, NOT `engine/build/`. Rebuild the engine wasm
+  and the dev server keeps serving the previous one — the page then runs an
+  engine one version behind, which looks like a frontend bug (a new command
+  field silently ignored, for instance). Touch a file under `web/` after
+  `cmake --build engine/build/wasm`, and confirm with
+  `cmp engine/build/wasm/souvenir.wasm web/dist/souvenir/souvenir.wasm`.
 - Windows: run `build-desktop.sh` in Git Bash. The script self-configures PATH
   (rustup's cargo and MSVC's `link.exe` ahead of the standalone Rust and Git's
   coreutils `link`) and re-activates a half-cloned `.emsdk`. Two prereqs it

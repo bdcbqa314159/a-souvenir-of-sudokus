@@ -342,6 +342,21 @@
       /* ...and the cells give back the height he occupies */
       .app.hangman-mode { --cell: min((100vw - 1.1rem) / 9, (100vh - 13rem - 18vh) / 9); }
     }
+    /* a hint being aimed: the grid waits to be pointed at. Blank squares take
+       the crosshair and answer the cursor; the filled ones stay as they are,
+       since a hint has nothing to do there. */
+    .board-row.aiming .cell.aimable { cursor: crosshair; }
+    .board-row.aiming .cell.aimable:hover,
+    .board-row.aiming .cell.aimable:focus { background: rgba(181, 39, 29, 0.09); }
+    .board-row.aiming .grid { border-color: var(--red);
+                              box-shadow: 0 0 0 3px rgba(181, 39, 29, 0.14),
+                                          0 2px 14px rgba(26, 26, 26, 0.10); }
+    /* the question in the status line, counting itself down */
+    .aim-prompt { color: var(--red); font-style: italic;
+                  animation-name: look; animation-duration: 1.6s;
+                  animation-timing-function: ease-in-out;
+                  animation-iteration-count: infinite; }
+
     /* the reading beat: quiet, then the verdict lands. The whole line used to
        pulse; now the words carry the effect and the pulse stays as the
        reduced-motion fallback at the bottom of this block. */

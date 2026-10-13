@@ -103,7 +103,11 @@ std::string apply_command(const std::string &request) {
     }
     if (cmd == "hint") {
       Game g = game_of(req);
-      auto i = g.hint(seed_of(req));
+      // "i" is optional: the player chose a square, or left it to the engine
+      std::optional<int> target;
+      if (req.contains("i") && !req["i"].is_null())
+        target = int_arg(req, "i");
+      auto i = g.hint(seed_of(req), target);
       return respond(g, {{"index", i ? json(*i) : json(nullptr)}}).dump();
     }
     if (cmd == "check") {

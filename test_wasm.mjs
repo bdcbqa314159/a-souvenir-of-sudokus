@@ -29,6 +29,16 @@ assert(!Array.isArray(rsp.wrong), "check must not name positions");
 rsp = call({ cmd: "hint", game, seed: 1 });
 assert(rsp.ok && Number.isInteger(rsp.index), "hint");
 
+// an aimed hint lands on the square it was aimed at, and a square no hint
+// could fill is refused without touching the board
+const blank = game.puzzle.findIndex((v) => v === 0);
+rsp = call({ cmd: "hint", game, i: blank });
+assert(rsp.ok && rsp.index === blank, "aimed hint");
+assert(rsp.game.board[blank] === game.solution[blank], "aimed hint fills it");
+const clue = game.puzzle.findIndex((v) => v !== 0);
+rsp = call({ cmd: "hint", game, i: clue });
+assert(rsp.ok && rsp.index === null, "aim at a given is refused");
+
 rsp = call({ cmd: "phantom", game, seed: 3 });
 assert(rsp.ok && rsp.game.difficulty === "easy", "phantom");
 
