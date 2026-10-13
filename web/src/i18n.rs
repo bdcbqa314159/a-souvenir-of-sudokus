@@ -11,7 +11,7 @@ pub enum Msg {
     None,
     NoPack,
     EngineLoading,
-    Solved,
+    Solved(u32), // with the number of wrong digits placed on the way
     Checking,
     AllGood,
     WrongCells(usize),
@@ -45,7 +45,14 @@ impl Msg {
             Msg::None => String::new(),
             Msg::NoPack => tr.no_pack.into(),
             Msg::EngineLoading => tr.engine_loading.into(),
-            Msg::Solved => tr.solved.into(),
+            // a clean grid says so; otherwise the tally comes out at the end,
+            // which is the only moment it is not an oracle
+            Msg::Solved(0) => tr.solved.into(),
+            Msg::Solved(n) => format!(
+                "{} \u{00b7} {}",
+                tr.solved,
+                fill(tr.mistakes_tally, &n.to_string())
+            ),
             // a verdict should be readable before the words are: the mark
             // carries it in any language
             // the words only: the wink and the three dots are put back by the
@@ -169,6 +176,8 @@ pub struct T {
     pub ctl_pencil: &'static str,
     /// the aiming prompt; {} is the seconds left
     pub aim: &'static str,
+    /// the end-of-grid tally; {} is how many wrong digits were placed
+    pub mistakes_tally: &'static str,
     pub ctl_hint: &'static str,
     pub ctl_check: &'static str,
     pub ctl_undo: &'static str,
@@ -239,6 +248,7 @@ pub const EN: T = T {
     ctl_erase: "rubs the chosen cell out: its digit, or its pencil marks.",
     ctl_pencil: "pencil mode \u{2014} digits land as small notes instead of an answer. Tap the same digit again to take a note back.",
     aim: "point at an empty square \u{2014} {}s, or he picks one",
+    mistakes_tally: "{} wrong along the way",
     ctl_hint: "fills one correct cell for you. Point at an empty square and it lands there; take too long and it lands where it likes. Three per game, none in phantom or hangman mode.",
     ctl_check: "tells you how many of your digits are wrong \u{2014} not which ones. Three per game, none in phantom mode.",
     ctl_undo: "step back and forward through your own moves.",
@@ -309,6 +319,7 @@ pub const FR: T = T {
     ctl_erase: "efface la case choisie : son chiffre, ou ses notes au crayon.",
     ctl_pencil: "mode crayon \u{2014} les chiffres se posent en petites notes au lieu d'une r\u{e9}ponse. Retouche le m\u{ea}me chiffre pour retirer la note.",
     aim: "d\u{e9}signe une case vide \u{2014} {}s, sinon il choisit",
+    mistakes_tally: "{} faux en chemin",
     ctl_hint: "remplit une case juste pour toi. D\u{e9}signe une case vide et l\u{2019}indice s\u{2019}y pose; trop lent et il se pose o\u{f9} il veut. Trois par partie, aucune en mode fant\u{f4}me ou pendu.",
     ctl_check: "te dit combien de tes chiffres sont faux \u{2014} pas lesquels. Trois par partie, aucune en mode fant\u{f4}me.",
     ctl_undo: "reviens en arri\u{e8}re et en avant dans tes propres coups.",
@@ -379,6 +390,7 @@ pub const ES: T = T {
     ctl_erase: "borra la celda elegida: su d\u{ed}gito o sus notas a l\u{e1}piz.",
     ctl_pencil: "modo l\u{e1}piz \u{2014} los d\u{ed}gitos se anotan en peque\u{f1}o en vez de ser una respuesta. Toca el mismo d\u{ed}gito otra vez para quitar la nota.",
     aim: "se\u{f1}ala una casilla vac\u{ed}a \u{2014} {}s, o la elige \u{e9}l",
+    mistakes_tally: "{} errados por el camino",
     ctl_hint: "rellena una celda correcta por ti. Se\u{f1}ala una casilla vac\u{ed}a y la pista cae ah\u{ed}; si tardas, cae donde quiera. Tres por partida, ninguna en modo fantasma o del ahorcado.",
     ctl_check: "te dice cu\u{e1}ntos de tus d\u{ed}gitos est\u{e1}n mal \u{2014} no cu\u{e1}les. Tres por partida, ninguna en modo fantasma.",
     ctl_undo: "retrocede y avanza por tus propias jugadas.",
