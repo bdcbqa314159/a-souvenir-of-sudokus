@@ -281,6 +281,10 @@
                         color: var(--ink-soft); border-color: var(--line-faint); }
     .bar.setup button:hover:not(:disabled) { color: var(--ink); }
     .bar.setup button.on { color: var(--paper); }
+    /* the picker wears the room you are in: the phantom's cold blue, the
+       hangman's green, his red-black ink for the classic game */
+    .app.phantom .seg.modes button.on { background: var(--phantom); border-color: var(--phantom); }
+    .app.hangman-mode .seg.modes button.on { background: var(--hangman); border-color: var(--hangman); }
     .msg { margin-top: 0.75rem; min-height: 1.3rem; font-style: italic;
            color: var(--ink-soft); text-align: center; transition: color 0.4s ease; }
     .status { margin-top: 0.25rem; font-size: 0.82rem; color: var(--ink-soft);
