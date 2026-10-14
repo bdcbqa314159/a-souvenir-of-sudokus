@@ -64,7 +64,12 @@
   <!-- engine artifacts: built by emcmake (see README), copied by trunk -->
   <link data-trunk rel="copy-file" href="../engine/build/wasm/souvenir.js" data-target-path="souvenir" />
   <link data-trunk rel="copy-file" href="../engine/build/wasm/souvenir.wasm" data-target-path="souvenir" />
-  <link data-trunk rel="copy-dir" href="assets" />
+  <!-- the public packs, named one by one on purpose: copying all of assets/
+       swept in the real-scan pack (and a build script) whenever they happened
+       to be on the machine. His handwriting is added only by the family-pack
+       hook in Trunk.toml, and only when asked for. -->
+  <link data-trunk rel="copy-dir" href="assets/souvenir" data-target-path="assets/souvenir" />
+  <link data-trunk rel="copy-dir" href="assets/placeholder" data-target-path="assets/placeholder" />
   <link data-trunk rel="copy-file" href="manifest.webmanifest" />
   <link data-trunk rel="copy-file" href="404.html" />
   <link data-trunk rel="copy-file" href="sw.js" />

@@ -1,3 +1,11 @@
 [build]
 target = "index.html"
 dist = "dist"
+
+# The real-scan pack is opt-in, at every level: browser, desktop and Android all
+# build through trunk, so one hook covers all three. Without SOUVENIR_FAMILY=1
+# a build is a regular build even on the machine that holds the originals.
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = ["scripts/family-pack.sh"]

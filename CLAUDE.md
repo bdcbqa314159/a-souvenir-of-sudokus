@@ -23,11 +23,17 @@ with respect.
   (all rights reserved — separate from the MIT code).
 - `web/assets/abuelo/` = the REAL-scan family pack — his actual handwriting. Gitignored; exists only
   on the maintainer's machine. NEVER commit anything from it.
-- Runtime pack priority: abuelo > souvenir > placeholder — the real hand,
-  the souvenir of it, then the stand-in. A build made
-  where abuelo exists shows the real handwriting; every clone builds the
-  public generated version. `scripts/build-desktop.sh` prints which one it
-  bakes and fails gracefully if no valid pack exists.
+- **A build is a regular build unless it is asked otherwise.** Holding the
+  originals is not enough to get them into one: `SOUVENIR_FAMILY=1` (or
+  `./scripts/build-desktop.sh --family`) is the only way, and it fails loudly
+  if the pack is not there rather than quietly producing a public build. The
+  trunk hook `web/scripts/family-pack.sh` enforces this for all three worlds at
+  once — browser, desktop and Android all build through trunk. `index.html`
+  names the public packs one by one; it used to copy all of `assets/`, which
+  swept his handwriting into everything built here, Play artifacts included.
+- Runtime pack priority is still abuelo > souvenir > placeholder — the real
+  hand, the souvenir of it, then the stand-in. It simply never finds the first
+  one unless the build was asked for it.
 - Raw photos, curation data (`meta.csv`), and the watermark key live in
   `originals/` (gitignored). Without that machine they are not recoverable —
   do not assume they exist.
@@ -36,7 +42,10 @@ with respect.
 
 - Build desktop (any OS): `./scripts/build-desktop.sh` (see BUILDING.md)
 - Web dev server: `cd web && trunk serve --port 8642`; open `/?dev` for
-  uncapped assists + a solve button
+  uncapped assists + a solve button. Prefix `SOUVENIR_FAMILY=1` to develop
+  against his real handwriting; without it you get the generated pack, which
+  is what everyone else sees.
+- Family build of the desktop app: `./scripts/build-desktop.sh --family`
 - Engine tests: `cd engine && cmake --preset release && cmake --build
   --preset release -j && ctest --preset release`
 - Regenerate typeface: `cd atelier && .venv/bin/python pipeline.py synth`
