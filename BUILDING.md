@@ -11,6 +11,24 @@ wasm (pinned emsdk 3.1.64, cloned on first run), then `cargo tauri build`
 (which runs trunk itself). Bundles land under
 `web/src-tauri/target/release/bundle/`.
 
+## Which handwriting a build contains
+
+Every build is a **regular** build — the generated pack committed to the repo —
+including on the machine that holds the real scans. To bake in his actual
+handwriting, ask for it:
+
+```bash
+SOUVENIR_FAMILY=1 trunk serve            # browser
+./scripts/build-desktop.sh --family      # desktop app
+SOUVENIR_FAMILY=1 cargo tauri android build --aab   # Android
+```
+
+The flag fails if `web/assets/abuelo` is not there, rather than silently
+falling back — so a build either has what you asked for or stops. Everything
+else (CI, clones, anything headed for a store) gets the generated pack, which
+is the point: a Play artifact is a local build by nature, and his scans must
+never be in one.
+
 ## Android (APK)
 
 The engine needs no NDK work: it stays wasm, loaded by Android's WebView the
@@ -47,6 +65,17 @@ with `adb install -r` and launch
 The page loads from `http://tauri.localhost/`, which is why `web/index.html`'s
 stray-URL gate exempts that host — without it the app bounces itself to the
 valvula page on launch.
+
+The Android project at `src-tauri/gen/android` is **committed**, not generated
+on demand: it carries the portrait lock, a manifest that asks for no
+permissions, and the launcher icons. `cargo tauri android init` would put the
+defaults back — run it only on a fresh clone that has no project yet.
+
+`cargo tauri android build --aab` produces the Play artifact;
+`--apk --debug` is the one to put on an emulator. The debug build alone asks
+for `INTERNET` (from `app/src/debug/AndroidManifest.xml`), because
+`android dev` serves the frontend from this machine; the release manifest asks
+for nothing at all.
 
 A release APK/AAB needs a **keystore**, which is a third key to back up
 alongside the updater key and `wm.key`. Create it in Studio (Build → Generate

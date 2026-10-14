@@ -5,6 +5,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# --family bakes in the real-scan pack; without it this is a regular build even
+# on the machine that holds the originals (the trunk hook does the same for the
+# browser and the Android build)
+for arg in "$@"; do
+  case "$arg" in
+    --family) export SOUVENIR_FAMILY=1 ;;
+    *) echo "unknown argument: $arg (only --family is understood)" >&2; exit 1 ;;
+  esac
+done
+
 # Windows (Git Bash): rustup's cargo is shadowed by a standalone Rust install,
 # and Git's coreutils link.exe shadows MSVC's. Put both where the build expects.
 # (Assumes the VS "Desktop C++" env is already loaded — LIB/INCLUDE set.)
@@ -31,10 +41,12 @@ esac
 # privacy first: strip personal paths from anything we might distribute
 [ -f .cargo/config.toml ] || ./scripts/scrub-paths.sh
 
-# pack resolution: the ORIGINAL family pack (web/assets/abuelo/, real
-# handwriting, this-machine-only) is preferred by the game at runtime when
-# baked in; otherwise the GENERATED pack (committed to the repo) carries the
-# build. Validate whatever is present and say clearly which game this is.
+# pack resolution: a build is a REGULAR build — the generated pack, the one
+# committed to the repo — unless it is asked for otherwise. Pass --family (or
+# SOUVENIR_FAMILY=1) to bake in the real-scan pack from web/assets/abuelo/,
+# which exists only on the maintainer's machine. Holding the originals is no
+# longer enough to get them: they used to be swept into every build here,
+# including artifacts meant for other people.
 check_pack() {  # $1 = pack dir; prints glyph count or returns 1
   python3 - "$1" <<'PY'
 import json, pathlib, sys
@@ -51,23 +63,26 @@ print(len(refs))
 PY
 }
 
-HAVE_ORIGINAL=no
-if [ -d web/assets/abuelo ]; then
-  if n=$(check_pack web/assets/abuelo); then
-    HAVE_ORIGINAL=yes
-    echo "== pack: ORIGINAL family pack found ($n glyphs) — this build will show the real handwriting =="
-  else
-    echo "WARNING: web/assets/abuelo/ exists but is invalid — it will be ignored at runtime" >&2
-  fi
-fi
+# the generated pack carries every build, family ones included: it is the
+# fallback if a glyph is ever missing from the real one
 if n=$(check_pack web/assets/souvenir); then
-  [ "$HAVE_ORIGINAL" = yes ] || echo "== pack: generated pack ($n glyphs) — public build =="
+  echo "== pack: generated pack ($n glyphs) =="
 else
-  [ "$HAVE_ORIGINAL" = yes ] || {
-    echo "FATAL: no usable pack. web/assets/souvenir is missing or invalid (corrupted checkout?)" >&2
-    echo "       re-clone the repo, or run 'atelier/pipeline.py synth && genpaper' on the main machine." >&2
+  echo "FATAL: no usable pack. web/assets/souvenir is missing or invalid (corrupted checkout?)" >&2
+  echo "       re-clone the repo, or run 'atelier/pipeline.py synth && genpaper' on the main machine." >&2
+  exit 1
+fi
+
+if [ "${SOUVENIR_FAMILY:-0}" = "1" ]; then
+  if n=$(check_pack web/assets/abuelo); then
+    echo "== pack: HIS HANDWRITING is in this build ($n glyphs) — for the family, not for publishing =="
+  else
+    echo "FATAL: --family asked for the real-scan pack, but web/assets/abuelo is missing or invalid." >&2
+    echo "       It lives only on the maintainer's machine ('atelier/pipeline.py emit')." >&2
     exit 1
-  }
+  fi
+else
+  echo "== this is a regular build: his handwriting is NOT in it (pass --family for that) =="
 fi
 
 # engine -> wasm, with the pinned emsdk (cloned per machine, gitignored)
