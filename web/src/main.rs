@@ -12,12 +12,14 @@ use leptos::task::spawn_local;
 use serde_json::{json, Value};
 
 mod engine;
+mod flow;
 mod i18n;
 mod pack;
 mod phantom;
 mod session;
 
 use engine::{board_of, cmd, solved_game, Manifest};
+use flow::{changed_cell, next_mode, ModeStep};
 use i18n::{detect_lang, diff_label, fill, save_lang, t, Lang, Mode, Msg};
 use pack::{digit_style, load_pack, pack, paper_store, sprite_url, url_pack};
 use phantom::{stall_ms, window_ms, Phantom, LIVES};
@@ -332,7 +334,6 @@ fn App() -> impl IntoView {
     // a hidden tab still runs this clock while the player is elsewhere, which
     // silently cost three lives in four minutes. Coming back re-anchors it.
     {
-        let ph = ph;
         let handler = move |_: leptos::ev::Event| {
             let hidden = js_sys::Reflect::get(&document(), &"hidden".into())
                 .ok()
@@ -467,7 +468,7 @@ fn App() -> impl IntoView {
         // with what is actually on the board.
         let after = game.get_untracked().map(|g| board_of(&g, "board"));
         if let (Some(before), Some(after)) = (before, after) {
-            if let Some(i) = (0..81).find(|&i| before[i] != after[i]) {
+            if let Some(i) = changed_cell(&before, &after) {
                 landed.set(Some(i));
                 spawn_local(async move {
                     gloo_timers::future::TimeoutFuture::new(1400).await;
@@ -573,7 +574,7 @@ fn App() -> impl IntoView {
             return; // only a new game raises the dead
         }
         match key {
-            "h" | "ArrowLeft" if i % 9 > 0 => selected.set(i - 1),
+            "h" | "ArrowLeft" if !i.is_multiple_of(9) => selected.set(i - 1),
             "l" | "ArrowRight" if i % 9 < 8 => selected.set(i + 1),
             "k" | "ArrowUp" if i > 8 => selected.set(i - 9),
             "j" | "ArrowDown" if i < 72 => selected.set(i + 9),
@@ -672,7 +673,7 @@ fn App() -> impl IntoView {
                 new_game(d);
             }
             d @ ("1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9") => {
-                let v: i64 = d.parse().unwrap();
+                let Ok(v) = d.parse::<i64>() else { return };
                 let mark = pencil.get_untracked();
                 let before = game
                     .get_untracked()
@@ -809,19 +810,19 @@ fn App() -> impl IntoView {
                             view! { <div class="ghost glyph" style=format!("{style};opacity:{opacity:.2}")></div> }
                         })
                 });
-                let mark_imgs = (v == 0)
-                    .then(|| {
-                        marks[i]
-                            .iter()
-                            .filter_map(|d| digit_style(&man, "user", *d, i).map(|s| (*d, s)))
-                            .map(|(d, style)| {
-                                let (row, col) = mark_at(d);
-                                let style = format!("{style};grid-row:{row};grid-column:{col}");
-                                view! { <div class="glyph" style=style></div> }
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
+                let mark_imgs = if v == 0 {
+                    marks[i]
+                        .iter()
+                        .filter_map(|d| digit_style(&man, "user", *d, i).map(|s| (*d, s)))
+                        .map(|(d, style)| {
+                            let (row, col) = mark_at(d);
+                            let style = format!("{style};grid-row:{row};grid-column:{col}");
+                            view! { <div class="glyph" style=style></div> }
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new() // a square with a digit in it has nothing to pencil
+                };
                 view! {
                     <div class=class on:click=move |_| {
                         // the live signal, not the one this cell was drawn
@@ -928,41 +929,36 @@ fn App() -> impl IntoView {
     // One way in and out of each mode. It used to be two toggles, which meant
     // the way back to classic was pressing the mode you were already in —
     // easy to describe, annoying to live with.
+    // the decision is flow::next_mode, which is tested; this only carries it out
     let set_mode = move |target: Mode| {
-        if mode.get_untracked() == target {
-            return;
-        }
-        if ph.over.get_untracked() {
-            msg.set(Msg::Won); // the phantoms already took this grid
-            return;
-        }
-        // hangman interrogates digits as they land, and a finished grid has
-        // none left to land
-        if target == Mode::Hangman && game.get_untracked().as_ref().is_some_and(solved_game) {
-            msg.set(Msg::Solved(mistakes.get_untracked()));
-            return;
-        }
-        // leaving the phantom's room stays a decision rather than a mis-click:
-        // the first press asks, a second within three seconds goes
-        if mode.get_untracked() == Mode::Phantom {
-            let armed_recently = leave_arm
-                .get_untracked()
-                .is_some_and(|t| js_sys::Date::now() - t < 3_000.0);
-            if !armed_recently {
+        let step = next_mode(
+            mode.get_untracked(),
+            target,
+            ph.over.get_untracked(),
+            game.get_untracked().as_ref().is_some_and(solved_game),
+            leave_arm.get_untracked(),
+            js_sys::Date::now(),
+        );
+        match step {
+            ModeStep::Stay => {}
+            ModeStep::RefuseTaken => msg.set(Msg::Won),
+            ModeStep::RefuseSolved => msg.set(Msg::Solved(mistakes.get_untracked())),
+            ModeStep::Confirm => {
                 leave_arm.set(Some(js_sys::Date::now()));
                 msg.set(Msg::LeaveConfirm);
-                return;
+            }
+            ModeStep::Enter(target) => {
+                leave_arm.set(None);
+                mode.set(target);
+                msg.set(match target {
+                    Mode::Phantom => Msg::PhantomOn,
+                    Mode::Hangman => Msg::HangmanOn,
+                    Mode::Classic => Msg::BackClassic,
+                });
+                ph.clear_haunt();
+                ph.last_progress.set(js_sys::Date::now());
             }
         }
-        leave_arm.set(None);
-        mode.set(target);
-        msg.set(match target {
-            Mode::Phantom => Msg::PhantomOn,
-            Mode::Hangman => Msg::HangmanOn,
-            Mode::Classic => Msg::BackClassic,
-        });
-        ph.clear_haunt();
-        ph.last_progress.set(js_sys::Date::now());
     };
 
     let current_diff = move || {

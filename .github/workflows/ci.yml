@@ -69,6 +69,9 @@ jobs:
         # release too: the dev-mode gate is compile-time, so only a release
         # run proves ?dev cannot uncap the assists in a shipped build
         run: cd web && cargo test && cargo test --release
+      # the only linter the Rust had was a human reading the diff
+      - name: Clippy
+        run: cd web && cargo clippy --all-targets -- -D warnings
       - name: Build web frontend
         run: cd web && trunk build --release
 
