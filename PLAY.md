@@ -168,7 +168,16 @@ which is genuinely unrecoverable. Back it up anyway.
 ## Still to do in the repo
 
 - [ ] Feature graphic, 1024×500
-- [ ] Two phone screenshots
+- [x] Phone screenshots — `play/screenshots/` (JPEG, 1080×2400), captured from the
+      emulator on a **regular** build so they show the generated digits rather
+      than his real hand: classic in play, hangman with the gallows up, phantom
+      with its three hearts, and the rules card.
+- [ ] **Tall-phone layout.** On a 20:9 screen about a third of the page is
+      empty below the status line, and there is a tall gap above the board in
+      hangman while he is barely drawn. `--cell` is capped at `3.2rem`, so the
+      board cannot grow into a tall screen. It does not hurt play, but it makes
+      the store screenshots look emptier than the game is — worth fixing before
+      submitting, and the screenshots retaking afterwards.
 - [ ] Gradle signing config reading `keystore.properties`
 - [x] A CI job building the AAB from a clean clone — `.github/workflows/android.yml`,
       run from Actions → android → Run workflow. It asserts the artifact carries
