@@ -11,6 +11,24 @@ wasm (pinned emsdk 3.1.64, cloned on first run), then `cargo tauri build`
 (which runs trunk itself). Bundles land under
 `web/src-tauri/target/release/bundle/`.
 
+## Which handwriting a build contains
+
+Every build is a **regular** build — the generated pack committed to the repo —
+including on the machine that holds the real scans. To bake in his actual
+handwriting, ask for it:
+
+```bash
+SOUVENIR_FAMILY=1 trunk serve            # browser
+./scripts/build-desktop.sh --family      # desktop app
+SOUVENIR_FAMILY=1 cargo tauri android build --aab   # Android
+```
+
+The flag fails if `web/assets/abuelo` is not there, rather than silently
+falling back — so a build either has what you asked for or stops. Everything
+else (CI, clones, anything headed for a store) gets the generated pack, which
+is the point: a Play artifact is a local build by nature, and his scans must
+never be in one.
+
 ## Android (APK)
 
 The engine needs no NDK work: it stays wasm, loaded by Android's WebView the
