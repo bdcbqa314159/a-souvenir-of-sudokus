@@ -170,6 +170,12 @@ which is genuinely unrecoverable. Back it up anyway.
 - [ ] Feature graphic, 1024×500
 - [ ] Two phone screenshots
 - [ ] Gradle signing config reading `keystore.properties`
-- [ ] A CI job building the AAB from a clean clone, so a store artifact can
-      never be a local build (and so never his handwriting)
+- [x] A CI job building the AAB from a clean clone — `.github/workflows/android.yml`,
+      run from Actions → android → Run workflow. It asserts the artifact carries
+      the generated pack and **zero** references to the real-scan one, then
+      uploads the bundle for you to download and submit.
+      To have CI sign it, add four secrets: `ANDROID_KEYSTORE_BASE64`
+      (`base64 -i upload.jks`), `ANDROID_KEYSTORE_PASSWORD`,
+      `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them it still builds,
+      unsigned, which proves the pipeline but cannot be uploaded.
 - [ ] Replace `CONTACT_EMAIL` in `web/privacy.html` with the support address

@@ -1,0 +1,121 @@
+name: android
+
+# Builds the Play artifact on a GitHub runner — which is the point. A runner
+# clones the repo, and the repo has only the generated pack: his real
+# handwriting lives on one machine and is never committed. So an artifact built
+# here *cannot* carry it, where a local build could (and did, until the
+# SOUVENIR_FAMILY flag). The job asserts that rather than assuming it.
+#
+# Manual on purpose: Play uploads are a deliberate act, not a side effect of a
+# push. Run it from Actions -> android -> Run workflow, then download the
+# bundle from the run's artifacts and upload it in the Play Console.
+on:
+  workflow_dispatch:
+    inputs:
+      signed:
+        description: "sign with the upload key (needs the ANDROID_KEYSTORE_* secrets)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  aab:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # the engine reaches Android the same way it reaches the browser: as
+      # wasm, loaded by the WebView. No NDK work for the C++ at all.
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.64 # keep == the version pinned in .emsdk locally
+      - name: Build the engine to wasm
+        run: |
+          emcmake cmake -S engine -B engine/build/wasm -DCMAKE_BUILD_TYPE=Release
+          cmake --build engine/build/wasm -j
+
+      # Gradle cannot run on Java 25 (Android Studio's bundled JDK), which is
+      # why BUILDING.md tells you to install a 21 beside it. Same constraint here.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+          link-to-sdk: true
+
+      # the NDK compiles the Rust shell, not the engine
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: jetli/trunk-action@v0.5.0
+      - name: Install the tauri CLI
+        run: cargo install tauri-cli --locked --version "^2"
+
+      # Present only when the maintainer has added them. Without them the
+      # bundle still builds, unsigned, which is enough to prove the pipeline —
+      # it just cannot be uploaded to Play.
+      - name: Write the upload key, if this repo has one
+        if: inputs.signed
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::warning::no ANDROID_KEYSTORE_BASE64 secret — building an UNSIGNED bundle, which Play will not accept"
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          cat > web/src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/upload.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo "upload key in place"
+
+      - name: Build the bundle
+        env:
+          NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: cd web && cargo tauri android build --aab
+
+      # the whole reason this job exists: prove the artifact carries the
+      # generated pack and not his hand. The frontend is embedded in the native
+      # library on mobile, so that is where to look.
+      - name: The artifact must not contain his handwriting
+        run: |
+          set -euo pipefail
+          aab=$(find web/src-tauri/gen/android/app/build/outputs/bundle -name '*.aab' | head -1)
+          [ -n "$aab" ] || { echo "no bundle was produced" >&2; exit 1; }
+          work=$(mktemp -d)
+          unzip -q "$aab" 'base/lib/*/libapp_lib.so' -d "$work"
+          lib=$(find "$work" -name libapp_lib.so | head -1)
+          abuelo=$(strings "$lib" | grep -c 'assets/abuelo/' || true)
+          souvenir=$(strings "$lib" | grep -c 'assets/souvenir/' || true)
+          echo "real-scan pack references: $abuelo"
+          echo "generated pack references: $souvenir"
+          [ "$abuelo" -eq 0 ] || { echo "FATAL: the family pack is in this artifact — it must never be published" >&2; exit 1; }
+          [ "$souvenir" -gt 0 ] || { echo "FATAL: no generated pack in the artifact — it would ship with placeholder digits" >&2; exit 1; }
+          {
+            echo "### Play bundle"
+            echo ""
+            echo "- generated pack: **$souvenir** references"
+            echo "- real-scan pack: **$abuelo** (must be zero)"
+            echo "- signed: **${{ inputs.signed }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: play-bundle
+          path: web/src-tauri/gen/android/app/build/outputs/bundle/**/*.aab
+          if-no-files-found: error
+          retention-days: 14
