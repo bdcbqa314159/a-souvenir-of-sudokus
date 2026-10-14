@@ -48,6 +48,17 @@ The page loads from `http://tauri.localhost/`, which is why `web/index.html`'s
 stray-URL gate exempts that host — without it the app bounces itself to the
 valvula page on launch.
 
+The Android project at `src-tauri/gen/android` is **committed**, not generated
+on demand: it carries the portrait lock, a manifest that asks for no
+permissions, and the launcher icons. `cargo tauri android init` would put the
+defaults back — run it only on a fresh clone that has no project yet.
+
+`cargo tauri android build --aab` produces the Play artifact;
+`--apk --debug` is the one to put on an emulator. The debug build alone asks
+for `INTERNET` (from `app/src/debug/AndroidManifest.xml`), because
+`android dev` serves the frontend from this machine; the release manifest asks
+for nothing at all.
+
 A release APK/AAB needs a **keystore**, which is a third key to back up
 alongside the updater key and `wm.key`. Create it in Studio (Build → Generate
 Signed Bundle / APK); once the app is on Play it can never be replaced.

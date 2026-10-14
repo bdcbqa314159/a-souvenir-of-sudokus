@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: `cargo tauri android dev` serves the frontend from the
+     host machine, so the app has to be able to reach it. The release manifest
+     asks for nothing, and this is never merged into it. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
