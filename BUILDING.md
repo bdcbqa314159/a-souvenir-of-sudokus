@@ -49,7 +49,19 @@ What the machine needs:
 - **The Rust targets**: `rustup target add aarch64-linux-android
   armv7-linux-androideabi i686-linux-android x86_64-linux-android`
 
-Then, from `web/`, with the three variables set:
+One script handles the environment:
+
+```bash
+./scripts/android.sh apk      # debug APK, for an emulator or a cable
+./scripts/android.sh aab      # release bundle, the artifact Play wants
+./scripts/android.sh init     # first time on a machine with no project yet
+```
+
+It finds the SDK, the newest NDK and a JDK in Gradle's supported range (17-24,
+skipping Studio's bundled 25), says which of each it picked, and stops the dev
+server first since both write `web/dist`. Add `--family` for his handwriting.
+
+Or by hand, from `web/`, with the three variables set:
 
 ```
 export ANDROID_HOME="$HOME/Library/Android/sdk"
