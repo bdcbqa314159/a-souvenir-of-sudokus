@@ -13,7 +13,30 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// The upload key, if this machine has one. Play needs a signed bundle; a clone
+// (and CI) has no key and still builds, unsigned, exactly as before — so the
+// absence of a keystore is not an error, it just means this is not the machine
+// that uploads. Both this file and the keystore it points at are gitignored,
+// and must stay that way.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+val hasUploadKey = keystoreProperties.containsKey("storeFile")
+
 android {
+    if (hasUploadKey) {
+        signingConfigs {
+            create("upload") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
     compileSdk = 36
     namespace = "com.delapatada.souvenirsudokus"
     defaultConfig {
@@ -38,6 +61,9 @@ android {
             }
         }
         getByName("release") {
+            if (hasUploadKey) {
+                signingConfig = signingConfigs.getByName("upload")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
