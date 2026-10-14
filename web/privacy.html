@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy — a souvenir of sudokus</title>
+  <!--
+    The privacy policy, served from the game's own site because Play requires a
+    URL for one. Self-contained like 404.html: no assets, no scripts, nothing
+    to load — which is also the shortest way to demonstrate the policy itself.
+    All three languages are stacked rather than switched, so a reviewer (or
+    anyone) reads it without needing JavaScript.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    style-src 'unsafe-inline';
+    connect-src 'none';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none'" />
+  <style>
+    :root { --paper: #f7f2e8; --red: #b5271d; --ink: #1a1a1a;
+            --ink-soft: rgba(26, 26, 26, 0.74); }
+    * { box-sizing: border-box; }
+    body {
+      background-color: var(--paper);
+      background-image:
+        repeating-linear-gradient(to right, rgba(181, 39, 29, 0.07) 0 1px, transparent 1px 1.5rem),
+        repeating-linear-gradient(to bottom, rgba(181, 39, 29, 0.07) 0 1px, transparent 1px 1.5rem);
+      color: var(--ink); margin: 0; padding: 2rem 1.2rem 4rem;
+      font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+      line-height: 1.6;
+    }
+    main { max-width: 34rem; margin: 0 auto; }
+    h1 { font-size: 1.4rem; font-weight: normal; color: var(--red);
+         margin: 0 0 0.2rem; }
+    .date { color: var(--ink-soft); font-size: 0.85rem; margin: 0 0 2rem; }
+    h2 { font-size: 1.05rem; font-weight: normal; color: var(--red);
+         letter-spacing: 0.08em; margin: 2.4rem 0 0.6rem;
+         border-top: 1px solid rgba(181, 39, 29, 0.25); padding-top: 1.2rem; }
+    h3 { font-size: 0.95rem; font-weight: normal; margin: 1.4rem 0 0.3rem; }
+    p, li { color: var(--ink); }
+    ul { padding-left: 1.2rem; }
+    li { margin: 0.3rem 0; }
+    .soft { color: var(--ink-soft); font-size: 0.9rem; }
+    a { color: var(--red); }
+    footer { margin-top: 3rem; padding-top: 1.2rem; font-size: 0.85rem;
+             color: var(--ink-soft);
+             border-top: 1px solid rgba(181, 39, 29, 0.25); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>a souvenir of sudokus</h1>
+  <p class="date">Privacy policy · 14 October 2026</p>
+
+  <h2>ENGLISH</h2>
+
+  <p><strong>The game collects nothing about you.</strong> There is no account,
+  no sign-in, no analytics, no advertising, no trackers and no third-party
+  services of any kind.</p>
+
+  <h3>What is stored, and where</h3>
+  <p>The game keeps a few things <strong>on your own device</strong>, in your
+  browser's local storage or the app's own storage, so that it can behave like
+  a game rather than a web page:</p>
+  <ul>
+    <li>the grid you are playing, so you can close it and come back</li>
+    <li>the language you chose</li>
+    <li>a list of the grids you have finished — date, difficulty, how long it
+        took, and the grid itself</li>
+  </ul>
+  <p>None of it is ever sent anywhere. It never leaves your device. Clearing
+  your browser's data for this site, or uninstalling the app, deletes all of
+  it permanently — there is no copy elsewhere, including none held by me.</p>
+
+  <h3>Network</h3>
+  <ul>
+    <li><strong>The Android app</strong> makes no network request at all. It
+        holds no permission to do so.</li>
+    <li><strong>The browser version</strong> is served by GitHub Pages. Like
+        any web host, GitHub sees the requests that fetch the page; that is
+        GitHub's processing, under
+        <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">their
+        privacy statement</a>, and nothing is added by me on top of it.</li>
+    <li><strong>The desktop app</strong> asks GitHub once at launch whether a
+        newer version exists, so it can offer it to you. That request goes to
+        GitHub and contains nothing about you beyond what any download does.</li>
+  </ul>
+
+  <h3>Children</h3>
+  <p>The game is suitable for any age and collects no data from anyone,
+  children included.</p>
+
+  <h3>Your rights</h3>
+  <p>Data protection law gives you rights of access, correction and erasure
+  over personal data held about you. I hold none, so there is nothing to
+  request — and the data on your device is already entirely in your hands.</p>
+
+  <h3>Changes</h3>
+  <p>If this policy ever changes, the version here changes with its date. The
+  page is part of the game's public repository, so its history is visible.</p>
+
+  <h2>FRANÇAIS</h2>
+
+  <p><strong>Le jeu ne collecte rien sur vous.</strong> Aucun compte, aucune
+  connexion, aucune analyse d'audience, aucune publicité, aucun traceur et
+  aucun service tiers.</p>
+
+  <h3>Ce qui est conservé, et où</h3>
+  <p>Le jeu garde quelques éléments <strong>sur votre appareil</strong>, dans
+  le stockage local de votre navigateur ou celui de l'application :</p>
+  <ul>
+    <li>la grille en cours, pour pouvoir fermer et revenir</li>
+    <li>la langue choisie</li>
+    <li>la liste des grilles terminées — date, difficulté, durée, et la grille
+        elle-même</li>
+  </ul>
+  <p>Rien n'est envoyé où que ce soit. Effacer les données du site, ou
+  désinstaller l'application, supprime tout définitivement : il n'existe
+  aucune copie ailleurs, et je n'en détiens aucune.</p>
+
+  <h3>Réseau</h3>
+  <ul>
+    <li><strong>L'application Android</strong> ne fait aucune requête réseau.
+        Elle n'en a même pas l'autorisation.</li>
+    <li><strong>La version navigateur</strong> est hébergée par GitHub Pages.
+        Comme tout hébergeur, GitHub voit les requêtes qui chargent la page ;
+        cela relève de sa propre politique de confidentialité, et je n'y ajoute
+        rien.</li>
+    <li><strong>L'application de bureau</strong> demande une fois à GitHub, au
+        lancement, s'il existe une version plus récente, afin de vous la
+        proposer.</li>
+  </ul>
+
+  <h3>Enfants</h3>
+  <p>Le jeu convient à tout âge et ne collecte aucune donnée de personne, les
+  enfants compris.</p>
+
+  <h3>Vos droits</h3>
+  <p>La loi vous donne des droits d'accès, de rectification et d'effacement sur
+  les données personnelles vous concernant. Je n'en détiens aucune : il n'y a
+  donc rien à demander, et ce qui se trouve sur votre appareil vous appartient
+  déjà entièrement.</p>
+
+  <h2>ESPAÑOL</h2>
+
+  <p><strong>El juego no recoge nada sobre ti.</strong> Sin cuenta, sin inicio
+  de sesión, sin analítica, sin publicidad, sin rastreadores y sin servicios de
+  terceros.</p>
+
+  <h3>Qué se guarda, y dónde</h3>
+  <p>El juego guarda unas pocas cosas <strong>en tu propio dispositivo</strong>,
+  en el almacenamiento local del navegador o en el de la aplicación:</p>
+  <ul>
+    <li>la cuadrícula que estás jugando, para poder cerrarla y volver</li>
+    <li>el idioma que elegiste</li>
+    <li>la lista de cuadrículas terminadas — fecha, dificultad, cuánto tardaste
+        y la cuadrícula misma</li>
+  </ul>
+  <p>Nada se envía a ningún sitio. Borrar los datos del sitio, o desinstalar la
+  aplicación, lo elimina todo de forma permanente: no hay copia en ningún otro
+  lugar, y yo no tengo ninguna.</p>
+
+  <h3>Red</h3>
+  <ul>
+    <li><strong>La aplicación de Android</strong> no hace ninguna petición de
+        red. Ni siquiera tiene permiso para hacerla.</li>
+    <li><strong>La versión de navegador</strong> está alojada en GitHub Pages.
+        Como cualquier alojamiento, GitHub ve las peticiones que cargan la
+        página; eso se rige por su propia política, y yo no añado nada.</li>
+    <li><strong>La aplicación de escritorio</strong> pregunta una vez a GitHub,
+        al arrancar, si existe una versión más nueva, para ofrecértela.</li>
+  </ul>
+
+  <h3>Niños</h3>
+  <p>El juego es adecuado para cualquier edad y no recoge datos de nadie, niños
+  incluidos.</p>
+
+  <h3>Tus derechos</h3>
+  <p>La ley te da derechos de acceso, rectificación y supresión sobre los datos
+  personales que te conciernen. Yo no tengo ninguno, así que no hay nada que
+  solicitar — y lo que está en tu dispositivo ya es enteramente tuyo.</p>
+
+  <footer>
+    <p>a souvenir of sudokus — dedicated to el abuelo.<br />
+    Contact: <a href="mailto:CONTACT_EMAIL">CONTACT_EMAIL</a><br />
+    <span class="soft">Bernardo Cohen / deLaPatada Software</span></p>
+  </footer>
+</main>
+</body>
+</html>

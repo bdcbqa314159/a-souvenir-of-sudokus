@@ -46,6 +46,8 @@ with respect.
   against his real handwriting; without it you get the generated pack, which
   is what everyone else sees.
 - Family build of the desktop app: `./scripts/build-desktop.sh --family`
+- Android: `./scripts/android.sh apk|aab` (finds the SDK/NDK/JDK itself —
+  Gradle 8.14 cannot run on Studio's bundled Java 25)
 - Engine tests: `cd engine && cmake --preset release && cmake --build
   --preset release -j && ctest --preset release`
 - Regenerate typeface: `cd atelier && .venv/bin/python pipeline.py synth`
